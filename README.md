@@ -7,7 +7,7 @@ This repository has the source code for the implementation of various hash funct
 
 ### Installation 
 
-Run the following command: `git clone --recurse-submodules https://github.com/DominikHorn/hashing-benchmark.git`
+Run the following command: `git clone --recurse-submodules https://github.com/yliu634/learned.git`
 
 ### Build & Run
 - To run the hash table experiments
