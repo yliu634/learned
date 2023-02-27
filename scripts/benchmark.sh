@@ -10,7 +10,7 @@ do
     #54 82 122 185 300
     for overalloc in 34 
     do
-        for model_name in "RMIHash" "RadixSplineHash" 
+        for model_name in "RMIHash" #"RadixSplineHash" 
         do
             echo "Start Here" $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024 >>results/results.json
             echo "Start Here" $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024 >>results/log_stats.out

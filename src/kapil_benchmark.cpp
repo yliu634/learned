@@ -90,7 +90,7 @@ template <class Table_class>
 void print_data_statistics_generic(uint64_t dataset_size,dataset::ID did)
 {
   
-  std::cout << "performing setup... ";
+  std::cout << "performing setup.. ";
   auto start = std::chrono::steady_clock::now();
 
   // Generate data (keys & payloads) & probing set

@@ -152,7 +152,7 @@ static void TableProbe(benchmark::State& state) {
       "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
       dataset::name(probing_dist);
   if (previous_signature != signature) {
-    std::cout << "performing setup... ";
+    std::cout << "performing setup... .";
     auto start = std::chrono::steady_clock::now();
 
     // Generate data (keys & payloads) & probing set
@@ -258,7 +258,7 @@ static void TableMixedLookup(benchmark::State& state) {
                           dataset::name(did) + "_" +
                           dataset::name(probing_dist);
   if (previous_signature != signature) {
-    std::cout << "performing setup... ";
+    std::cout << "performing setup... ..";
     auto start = std::chrono::steady_clock::now();
 
     // Generate data (keys & payloads) & probing set
@@ -471,7 +471,7 @@ static void GapStats(benchmark::State& state) {
       "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
       dataset::name(probing_dist);
   if (previous_signature != signature) {
-    std::cout << "performing setup... ";
+    std::cout << "performing setup... ... .";
     auto start = std::chrono::steady_clock::now();
 
     // Generate data (keys & payloads) & probing set
@@ -577,7 +577,7 @@ static void CollisionStats(benchmark::State& state) {
       "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
       dataset::name(probing_dist);
   if (previous_signature != signature) {
-    std::cout << "performing setup... ";
+    std::cout << "performing setup... ... ..";
     auto start = std::chrono::steady_clock::now();
 
     // Generate data (keys & payloads) & probing set

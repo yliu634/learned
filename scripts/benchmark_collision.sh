@@ -11,4 +11,4 @@
 
 
 cp src/benchmarks/passive_stats.hpp src/benchmarks/tables.hpp
-bash run.sh >>hash_comp_stats.out
+bash scripts/run.sh >>resultshash_comp_stats.out

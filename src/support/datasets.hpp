@@ -65,6 +65,7 @@ std::vector<Key> load(const std::string& filepath) {
 
     // Parse file
     uint64_t num_elements = read_little_endian_8(buffer, 0);
+    num_elements = 2000000;
     assert(num_elements <= max_num_elements);
     switch (sizeof(Key)) {
       case sizeof(std::uint64_t):
@@ -286,7 +287,6 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
       break;
     }
 
-
     case ID::NORMAL: {
       const auto mean = 100.0;
       const auto std_dev = 20.0;
@@ -375,13 +375,8 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
         ds_wiki = load<Data>(datasets_path+"wiki_ts_200M_uint64");
         std::shuffle(ds_wiki.begin(), ds_wiki.end(),rng);
       }
-
-      // for(int itr=1;itr<ds_wiki.size();)
-      // {
-      //   std::cout<<" itr: "<<itr<<" wiki val: "<<log2(ds_wiki[itr]-ds_wiki[itr-1])<<std::endl;
-      //   itr+=10000000;
-      // }
-      // ds file does not exist
+      std::cerr << "Load data finished" << std::endl;
+      
       if (ds_wiki.empty()) return {};
        size_t j=0;
        size_t i = 0;
