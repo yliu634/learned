@@ -138,6 +138,8 @@ inline std::string name(ID id) {
 
 template <class Data = std::uint64_t>
 std::vector<Data> load_cached(ID id, size_t dataset_size) {
+  std::string datasets_path = "/users/yiliu124/learned/datasets/";
+
   static std::random_device rd;
   static std::default_random_engine rng(rd());
 
@@ -308,7 +310,7 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
     }
     case ID::FB: {
       if (ds_fb.empty()) {
-        ds_fb = load<Data>("/home/kapil/PhDAcads/benchmark_hashing/SOSD/scripts/data/fb_200M_uint64");
+        ds_fb = load<Data>(datasets_path+"fb_200M_uint64");
         std::shuffle(ds_fb.begin(), ds_fb.end(),rng);
       }
       // ds file does not exist
@@ -340,7 +342,7 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
     }
     case ID::OSM: {
       if (ds_osm.empty()) {
-        ds_osm = load<Data>("/home/kapil/PhDAcads/benchmark_hashing/SOSD/scripts/data/osm_cellids_200M_uint64");
+        ds_osm = load<Data>(datasets_path+"osm_cellids_200M_uint64");
         std::shuffle(ds_osm.begin(), ds_osm.end(),rng);
       }
 
@@ -370,7 +372,7 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
     }
     case ID::WIKI: {
       if (ds_wiki.empty()) {
-        ds_wiki = load<Data>("/home/kapil/PhDAcads/benchmark_hashing/SOSD/scripts/data/wiki_ts_200M_uint64");
+        ds_wiki = load<Data>(datasets_path+"wiki_ts_200M_uint64");
         std::shuffle(ds_wiki.begin(), ds_wiki.end(),rng);
       }
 

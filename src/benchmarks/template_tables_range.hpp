@@ -11,6 +11,7 @@
 #include <iterator>
 #include <learned_hashing.hpp>
 #include <limits>
+#include <functional>
 #include <masters_thesis.hpp>
 #include <ostream>
 #include <random>

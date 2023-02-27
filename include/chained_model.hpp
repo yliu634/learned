@@ -177,8 +177,8 @@ class KapilChainedModelHashTable {
 
     std::cout<<"Enddd Inserts"<<std::endl;
 
-    // auto duration = duration_cast<milliseconds>(stop - start); 
-    auto duration = duration_cast<std::chrono::nanoseconds>(stop - start); 
+    // auto duration = std::chrono::duration_cast<milliseconds>(stop - start); 
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
     std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/insert_count << " nanoseconds" << std::endl;
 
 

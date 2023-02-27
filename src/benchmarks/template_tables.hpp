@@ -9,6 +9,7 @@
 #include <hashtable.hpp>
 #include <iostream>
 #include <iterator>
+#include <functional>
 #include <learned_hashing.hpp>
 #include <limits>
 #include <masters_thesis.hpp>
