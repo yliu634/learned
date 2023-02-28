@@ -1,9 +1,7 @@
 
-
 import sys
 
-
-
+# hashing functions list
 hash_mapping_dict={
     "MURMUR":"using MURMUR = hashing::MurmurFinalizer<Key>;",
     "MultPrime64":"using MultPrime64 = hashing::MultPrime64;",
@@ -17,14 +15,14 @@ hash_mapping_dict={
     "RMIHash":"using RMIHash = learned_hashing::RMIHash<std::uint64_t,max_models>;"
 }
 
-
+# traditional, with mchine learning model or mph
 model_type_dict={
     "Traditional":"",
     "Exotic":"Exotic",
     "Model":"Model"
 
 }
-
+# hashing schemes
 scheme_dict={
     "Cuckoo":"Cuckoo",
     "Linear":"Linear",
@@ -36,13 +34,6 @@ kickin_strat_dict={
     "Biased":"using KickingStrat = kapilmodelhashtable::KapilModelBiasedKicking<kickinit_strat_bias>;"
 }
 
-
-#  python3 kapil_python_edit_script.py 4 50 MURMUR Traditional Cuckoo Balanced 0 1 1
-#  python3 kapil_python_edit_script.py 4 50 RMIHash Model Cuckoo Balanced 0 10000 10
-#  python3 kapil_python_edit_script.py 4 50 MWHC Exotic Chained Balanced 0 10000 10
-#  python3 kapil_python_edit_script.py 4 50 RadixSplineHash Model Cuckoo Biased 0 100000 10
-#  python3 kapil_python_edit_script.py 1 10 MWHC Exotic Chained Balanced 0 10000 10
-#  python3 kapil_python_edit_script.py 4 50 RadixSplineHash Model Linear Biased 0 100000 1024
 
 bucket_size=int(sys.argv[1])
 overalloc=int(sys.argv[2])
@@ -98,13 +89,11 @@ def bench_line(hashing_scheme,model_type,bucket_size,overalloc):
 
 
 
-
 file1=open("src/benchmarks/template_tables.hpp","r")
 file2=open("src/benchmarks/tables.hpp","w")
 
 # Iterate over each line in the file
 for line in file1.readlines():
-
     file2.write(line)
 
 # Release used resources

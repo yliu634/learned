@@ -464,7 +464,7 @@ class KapilLinearHashTable {
     return directory_bytesize;
   }
 
-  //kapil_change: assuming model size to be zero  
+  //kapil_change: assuming model size to be zero ; Yi goes: what? 
   size_t model_byte_size() const { return 0; }
 
   size_t byte_size() const { return model_byte_size() + directory_byte_size(); }

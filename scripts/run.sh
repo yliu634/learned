@@ -19,5 +19,5 @@ BUILD_DIR="../cmake-build-$(echo "${BUILD_TYPE}" | awk '{print tolower($0)}')"
 
 # Execute the target
 # _GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_results.json --benchmark_out_format=json --benchmark_filter="${NEW_REGEX}"
-
-_GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_result.json --benchmark_out_format=json
+#_GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_result.json --benchmark_out_format=json
+_GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_result.json --benchmark_out_format=console

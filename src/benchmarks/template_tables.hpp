@@ -37,12 +37,7 @@ using Key = std::uint64_t;
 using Payload = std::uint64_t;
 
 
-// const std::vector<std::int64_t> dataset_sizes{100000000};
-// const std::vector<std::int64_t> datasets{
-//     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::UNIFORM)
-//     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
-//     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL)
-//     };
+
 const std::vector<std::int64_t> probe_distributions{
     // static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
     //     dataset::ProbingDistribution::EXPONENTIAL_SORTED),
@@ -51,26 +46,19 @@ const std::vector<std::int64_t> probe_distributions{
     static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
         dataset::ProbingDistribution::UNIFORM)};
 
-const std::vector<std::int64_t> dataset_sizes{100000000};
+const std::vector<std::int64_t> dataset_sizes{1000000}; // {100000000}
 const std::vector<std::int64_t> succ_probability{100};
 const std::vector<std::int64_t> point_query_prop{0,10,20,30,40,50,60,70,80,90,100};
 const std::vector<std::int64_t> datasets{
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::WIKI),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
+    //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::UNIFORM),
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::NORMAL),
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL),
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::OSM),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::FB)
+    // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::FB)
     };
 
-// const std::vector<std::int64_t> probe_distributions{
-//     static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
-//         dataset::ProbingDistribution::UNIFORM),
-//     static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
-//         dataset::ProbingDistribution::EXPONENTIAL_RANDOM),
-//     static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
-//         dataset::ProbingDistribution::EXPONENTIAL_SORTED)};
 
 template <class Table>
 static void Construction(benchmark::State& state) {
@@ -157,7 +145,7 @@ static void TableProbe(benchmark::State& state) {
           keys.begin(), keys.end(), std::back_inserter(data),
           [](const Key& key) { return std::make_pair(key, key - 5); });
       int succ_probability=100;
-      probing_set = dataset::generate_probing_set(keys, probing_dist,succ_probability);
+      probing_set = dataset::generate_probing_set(keys,probing_dist,succ_probability);
     }
 
     if (data.empty()) {
@@ -223,7 +211,7 @@ static void TableProbe(benchmark::State& state) {
 
 
 
-
+// mix of point lookup and range query
 template <class Table>
 static void TableMixedLookup(benchmark::State& state) {
   std::random_device rd;
@@ -330,7 +318,7 @@ static void TableMixedLookup(benchmark::State& state) {
 
 
 
-template <class Table,size_t RangeSize>
+template <class Table, size_t RangeSize>
 static void PointProbe(benchmark::State& state) {
   // Extract variables
   const auto dataset_size = static_cast<size_t>(state.range(0));
@@ -357,7 +345,7 @@ static void PointProbe(benchmark::State& state) {
   if(previous_signature!=signature) 
   {
     std::cout<<"Probing set size is: "<<probing_set.size()<<std::endl;
-    std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
+    std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
   }
      
   if (previous_signature != signature) {
@@ -397,7 +385,7 @@ static void PointProbe(benchmark::State& state) {
               << std::endl;
     
     std::sort(data.begin(), data.end(),[](const auto& a, const auto& b) { return a.first < b.first; });
-    std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
+    std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
     // table->print_data_statistics();
 
     Table* table = (Table*)prev_table;
@@ -448,7 +436,7 @@ static void PointProbe(benchmark::State& state) {
 
 
 
-template <class Table,size_t RangeSize>
+template <class Table, size_t RangeSize>
 static void CollisionStats(benchmark::State& state) {
   // Extract variables
   const auto dataset_size = static_cast<size_t>(state.range(0));
@@ -506,7 +494,6 @@ static void CollisionStats(benchmark::State& state) {
     std::cout << "succeeded in " << std::setw(9) << diff.count() << " seconds"
               << std::endl;
     
-    
 
   }
   
@@ -516,7 +503,7 @@ static void CollisionStats(benchmark::State& state) {
 
   if (previous_signature != signature)
   {
-    std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
+    std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
     table->print_data_statistics();
   }
 
@@ -553,7 +540,6 @@ static void CollisionStats(benchmark::State& state) {
   state.SetLabel(table->name() + ":" + dataset::name(did) + ":" +
                  dataset::name(probing_dist)+":"+temp);
 }
-
 
 
 
@@ -644,7 +630,7 @@ const std::vector<std::int64_t> overalloc_chain{10,25,50,100};
 
 
 
-template <class Table,size_t RangeSize>
+template <class Table, size_t RangeSize>
 static void PointProbeCuckoo(benchmark::State& state) {
   // Extract variables
   const auto dataset_size = static_cast<size_t>(state.range(0));
@@ -701,7 +687,7 @@ static void PointProbeCuckoo(benchmark::State& state) {
     std::cout << "succeeded in " << std::setw(9) << diff.count() << " seconds"
               << std::endl;
 
-    // std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
+    // std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
     // prev_table->print_data_statistics();
 
   }
@@ -713,41 +699,10 @@ static void PointProbeCuckoo(benchmark::State& state) {
 
   if (previous_signature != signature)
   {
-    std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
+    std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
     table->print_data_statistics();
   }
 
-
-  // if (previous_signature != signature)
-  // {
-  //   std::cout<<"Probing set size is: "<<probing_set.size()<<std::endl;
-  //   std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
-  //   table->print_data_statistics();
-
-   
-
-  //    auto start = std::chrono::high_resolution_clock::now(); 
-
-  //   for(int itr=0;itr<probing_set.size()*0.01;itr++)
-  //   {
-  //     const auto searched = probing_set[itr%probing_set.size()];
-  //     // i++;
-  //     // table->hash_val(searched);
-  //     // Lower bound lookup
-  //    table->insert(searched,searched);  // TODO: does this generate a 'call' op? =>
-  //                     // https://stackoverflow.com/questions/10631283/how-will-i-know-whether-inline-function-is-actually-replaced-at-the-place-where
-      
-      
-  //     // __sync_synchronize();
-  //   }
-
-  //    auto stop = std::chrono::high_resolution_clock::now(); 
-  //   // auto duration = duration_cast<milliseconds>(stop - start); 
-  //   auto duration = duration_cast<std::chrono::nanoseconds>(stop - start); 
-  //   std::cout << "Insert Latency is: "<< duration.count()*100.00/probing_set.size() << " nanoseconds" << std::endl;
-
-  
-  // }
 
 
   // std::cout<<"signature swap"<<std::endl;
@@ -784,10 +739,11 @@ static void PointProbeCuckoo(benchmark::State& state) {
                  dataset::name(probing_dist)+":"+temp);
 }
 
-
 #define KAPILBMCuckoo(Table)                                                              \
   BENCHMARK_TEMPLATE(PointProbeCuckoo, Table, 0)                                     \
       ->ArgsProduct({dataset_sizes, datasets, probe_distributions,succ_probability});
+
+
 
 
 
