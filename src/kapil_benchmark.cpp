@@ -314,7 +314,6 @@ int main()
 
   // using RadixSplineHash = learned_hashing::RadixSplineHash<std::uint64_t,18,1024>;
   // using KapilLinearModelHashTable= masters_thesis::KapilLinearModelHashTable<Key, Payload, 2,50, RadixSplineHash>;
-
   // print_data_statistics_generic<KapilLinearModelHashTable>(dataset_sizes[0], datasets[0]);
 
   expt_1();

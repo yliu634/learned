@@ -46,7 +46,7 @@ const std::vector<std::int64_t> probe_distributions{
     static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
         dataset::ProbingDistribution::UNIFORM)};
 
-const std::vector<std::int64_t> dataset_sizes{1000000}; // {100000000}
+const std::vector<std::int64_t> dataset_sizes{10000000}; // {100000000}
 const std::vector<std::int64_t> succ_probability{100};
 const std::vector<std::int64_t> point_query_prop{0,10,20,30,40,50,60,70,80,90,100};
 const std::vector<std::int64_t> datasets{
@@ -54,7 +54,7 @@ const std::vector<std::int64_t> datasets{
     //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::UNIFORM),
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::NORMAL),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL),
+    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL)
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::OSM),
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::FB)
     };

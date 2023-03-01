@@ -18,6 +18,6 @@ BUILD_DIR="../cmake-build-$(echo "${BUILD_TYPE}" | awk '{print tolower($0)}')"
 # NEW_REGEX=$(python only_new.py)
 
 # Execute the target
-# _GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_results.json --benchmark_out_format=json --benchmark_filter="${NEW_REGEX}"
+# _GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_result.json --benchmark_out_format=json --benchmark_filter="${NEW_REGEX}"
 #_GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_result.json --benchmark_out_format=json
-_GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET} --benchmark_out=benchmark_result.json --benchmark_out_format=console
+_GLIBCXX_REGEX_STATE_LIMIT=3000 ${BUILD_DIR}/src/${TARGET}  --benchmark_out=benchmark_result --benchmark_out_format=console

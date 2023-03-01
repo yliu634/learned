@@ -21,7 +21,6 @@ do
     done
 done
 
-
 if false; then
 ######## TRADITIONAL LINEAR PROBING ################
 
@@ -39,6 +38,7 @@ do
         done
     done
 done
+
 
 ######## PERFECT LINEAR PROBING ################
 

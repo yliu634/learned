@@ -46,7 +46,7 @@ const std::vector<std::int64_t> probe_distributions{
     static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
         dataset::ProbingDistribution::UNIFORM)};
 
-const std::vector<std::int64_t> dataset_sizes{1000000}; // {100000000}
+const std::vector<std::int64_t> dataset_sizes{10000000}; // {100000000}
 const std::vector<std::int64_t> succ_probability{100};
 const std::vector<std::int64_t> point_query_prop{0,10,20,30,40,50,60,70,80,90,100};
 const std::vector<std::int64_t> datasets{
@@ -54,7 +54,7 @@ const std::vector<std::int64_t> datasets{
     //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::UNIFORM),
     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::NORMAL),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL),
+    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL)
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::OSM),
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::FB)
     };
@@ -548,6 +548,7 @@ static void CollisionStats(benchmark::State& state) {
 
 using namespace masters_thesis;
 
+
 #define BM(Table)                                                              \
   BENCHMARK_TEMPLATE(Construction, Table)                                      \
       ->ArgsProduct({dataset_sizes, datasets});                                \
@@ -765,9 +766,9 @@ static void PointProbeCuckoo(benchmark::State& state) {
   using KapilCuckooModelHashTable##BucketSize##OverAlloc##HashFn##KickingStrat1 = kapilcuckooexotichashtable::KapilCuckooExoticHashTable<Key, Payload, BucketSize,OverAlloc, MMPHF, MURMUR1,KickingStrat1>; \
   KAPILBMCuckoo(KapilCuckooModelHashTable##BucketSize##OverAlloc##HashFn##KickingStrat1);
 
-using RMIHash = learned_hashing::RMIHash<std::uint64_t,100>;
-
-BenchmarKapilLinearModel(1,34,RMIHash);
+//using RMIHash = learned_hashing::RMIHash<std::uint64_t,100>;
+ControlPlaneLudo<Key, Payload> cp(1024);
+//BenchmarKapilLinearModel(1,34,RMIHash);
 
 
 

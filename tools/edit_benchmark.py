@@ -45,7 +45,7 @@ kickinit_strat_bias=int(sys.argv[7])
 max_models=int(sys.argv[8])
 max_error=int(sys.argv[9])
 num_radix_bits=18
-
+namespace_str="_"
 
 def hash_line(model_name,model_type,max_models,max_error,num_radix_bits):
     if model_type_dict[model_type]!="Model":
@@ -89,8 +89,8 @@ def bench_line(hashing_scheme,model_type,bucket_size,overalloc):
 
 
 
-file1=open("src/benchmarks/template_tables.hpp","r")
-file2=open("src/benchmarks/tables.hpp","w")
+file1=open("src/benchmarks_backup.cpp","r")
+file2=open("src/benchmarks.cpp","w")
 
 # Iterate over each line in the file
 for line in file1.readlines():
@@ -103,12 +103,14 @@ file2.close()
 
 # print(max_models,"max_models")
 
-with open("src/benchmarks/tables.hpp", "a") as myfile:
-
-    write_str=hash_line(model_name,model_type,max_models,max_error,num_radix_bits)+"\n"
+with open("src/benchmarks.cpp", "a") as myfile:
+    
+    write_str="using namespace "+namespace_str+";\n\n"
+    write_str+=hash_line(model_name,model_type,max_models,max_error,num_radix_bits)+"\n"
     write_str+=kick_line(hashing_scheme,kickinit_strat,kickinit_strat_bias)+"\n"
     write_str+=bench_line(hashing_scheme,model_type,bucket_size,overalloc)
 
-    write_str+="\n\n\n\n}  // namespace _\n"
+    write_str+="\n\n\n\nBENCHMARK_MAIN();\n"
+    #write_str+="std::cout << \"Benchmarking complete!\" << std::endl;\n"
 
     myfile.write(write_str)
