@@ -1,0 +1,62 @@
+#pragma once
+
+#include <immintrin.h>
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <iterator>
+#include <limits>
+#include <string>
+#include <vector>
+#include <utility>
+
+#include "ludo/ludotable.h"
+#include "include/convenience/builtins.hpp"
+#include "include/support.hpp"
+
+
+
+namespace masters_thesis {
+
+template<class Key = uint64_t, class Payload = uint64_t, uint VL = sizeof(V) * 8>
+class Ludo : public ControlPlaneLudo<Key, Payload, VL> {
+public:
+  explicit Ludo(std::vector<std::pair<Key,Payload>> &kv = vector<pair<Key, Payload>>(), uint32_t cap = 2048): 
+    ControlPlaneLudo(kv, cap) {
+    } 
+  
+
+  forceinline int operator[](const Key& key) const {
+    
+  }
+
+  void print_data_statistics() {
+
+  }
+
+  std::string name() {
+    // std::string prefix = (ManualPrefetch ? "Prefetched" : "");
+    std::string prefix;
+    return prefix + "KapilLinearHashTable<" + std::to_string(sizeof(Key)) + ", " +
+           std::to_string(sizeof(Payload)) + ", " + std::to_string(BucketSize) +
+           ", " + hashfn.name() + ">";
+  }
+
+  size_t directory_byte_size() const {
+    return 0;
+  }
+
+  size_t model_byte_size() const { 
+    return 0; 
+  }
+
+  size_t byte_size() const { 
+    return model_byte_size() + directory_byte_size(); 
+  }
+
+
+};
+
+}
+

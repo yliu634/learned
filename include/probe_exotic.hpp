@@ -73,7 +73,7 @@ class KapilLinearExoticHashTable {
 
   /// directory of buckets
   std::vector<Bucket> buckets;
-
+  bool disablelogging  = true;
   /// model for predicting the correct index
 //   Model model;
 
@@ -352,24 +352,24 @@ class KapilLinearExoticHashTable {
 
     std::map<int, int>::iterator it;
 
-    std::cout<<"Start Distance To Empty"<<std::endl;
+    if (!disablelogging) std::cout<<"Start Distance To Empty"<<std::endl;
 
     for (it = dist_to_empty_map.begin(); it != dist_to_empty_map.end(); it++)
     {
-      std::cout<<"Distance To Empty: ";
-      std::cout<<it->first<<" : "<<it->second<<std::endl;
+      if (!disablelogging) std::cout<<"Distance To Empty: ";
+      if (!disablelogging) std::cout<<it->first<<" : "<<it->second<<std::endl;
         // std::cout << it->first    // string (key)
         //           << ':'
         //           << it->second   // string's value 
         //           << std::endl;
     }
 
-    std::cout<<"Start Distance From Ideal"<<std::endl;
+    if (!disablelogging) std::cout<<"Start Distance From Ideal"<<std::endl;
 
     for (it = dist_from_ideal_map.begin(); it != dist_from_ideal_map.end(); it++)
     {
-      std::cout<<"Distance From Ideal: ";
-      std::cout<<it->first<<" : "<<it->second<<std::endl;
+      if (!disablelogging) std::cout<<"Distance From Ideal: ";
+      if (!disablelogging) std::cout<<it->first<<" : "<<it->second<<std::endl;
         // std::cout << it->first    // string (key)
         //           << ':'
         //           << it->second   // string's value 

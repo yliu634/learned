@@ -5,14 +5,10 @@
 #include <cstdint>
 #include <cstring>
 #include <ctime>
-#include <hashing.hpp>
-#include <hashtable.hpp>
 #include <iostream>
 #include <iterator>
 #include <functional>
-#include <learned_hashing.hpp>
 #include <limits>
-#include <masters_thesis.hpp>
 #include <ostream>
 #include <random>
 #include <stdexcept>
@@ -22,21 +18,27 @@
 #include <vector>
 #include <string>
 
+#include <hashing.hpp>
+#include <hashtable.hpp>
+#include <masters_thesis.hpp>
+#include <learned_hashing.hpp>
+
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "../../include/blob/blobstore.hpp"
 #include "../../thirdparty/perfevent/PerfEvent.hpp"
 #include "../support/datasets.hpp"
 #include "../support/probing_set.hpp"
+
 #include "include/convenience/builtins.hpp"
 #include "include/mmphf/rank_hash.hpp"
 #include "include/rmi.hpp"
 
 namespace _ {
+
 using Key = std::uint64_t;
 using Payload = std::uint64_t;
-
-
 
 const std::vector<std::int64_t> probe_distributions{
     // static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
@@ -58,6 +60,7 @@ const std::vector<std::int64_t> datasets{
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::OSM),
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::FB)
     };
+
 
 
 template <class Table>
@@ -625,6 +628,136 @@ const std::vector<std::int64_t> overalloc_chain{10,25,50,100};
 
 
 
+// ############################## SINGLE LUDOTABLE ##############################
+// ############################## SINGLE LUDOTABLE ##############################
+// ############################## SINGLE LUDOTABLE ##############################
+
+template <class Table, size_t RangeSize>
+static void PointProbeLudo(benchmark::State& state) {
+  // Extract variables
+  const auto dataset_size = static_cast<size_t>(state.range(0));
+  const auto did = static_cast<dataset::ID>(state.range(1));
+  const auto probing_dist =
+      static_cast<dataset::ProbingDistribution>(state.range(2));
+  const auto succ_probability =
+      static_cast<size_t>(state.range(3));
+  // google benchmark will run a benchmark function multiple times
+  // to determine, amongst other things, the iteration count for
+  // the benchmark loop. Technically, BM functions must be pure. However,
+  // since this setup logic is very expensive, we cache setup based on
+  // a unique signature containing all parameters.
+  // NOTE: google benchmark's fixtures suffer from the same
+  // 'execute setup multiple times' issue:
+  // https://github.com/google/benchmark/issues/952
+  std::string signature =
+      std::string(typeid(Table).name()) + "_" + std::to_string(RangeSize) +
+      "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
+      dataset::name(probing_dist);
+  if (previous_signature != signature) {
+    std::cout << "performing setup... ... ..";
+    auto start = std::chrono::steady_clock::now();
+
+    // Generate data (keys & payloads) & probing set
+    std::vector<std::pair<Key, Payload>> data{};
+    data.reserve(dataset_size);
+    {
+      auto keys = dataset::load_cached<Key>(did, dataset_size);
+
+      std::transform(
+          keys.begin(), keys.end(), std::back_inserter(data),
+          [](const Key& key) { return std::make_pair(key, key - 5); });
+      // int succ_probability=100;
+      probing_set = dataset::generate_probing_set(keys, probing_dist,succ_probability);
+    }
+
+    if (data.empty()) {
+      // otherwise google benchmark produces an error ;(
+      for (auto _ : state) {
+      }
+      std::cout << "failed" << std::endl;
+      return;
+    }
+
+    // build table
+    if (prev_table != nullptr) free_lambda();
+    prev_table = new Table(data);
+    free_lambda = []() { delete ((Table*)prev_table); };
+
+    // measure time elapsed
+    const auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> diff = end - start;
+    std::cout << "succeeded in " << std::setw(9) << diff.count() << " seconds"
+              << std::endl;
+
+    // std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
+    // prev_table->print_data_statistics();
+
+  }
+  
+
+  assert(prev_table != nullptr);
+  Table* table = (Table*)prev_table;
+
+
+  if (previous_signature != signature)
+  {
+    std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
+    table->print_data_statistics();
+  }
+
+
+
+  // std::cout<<"signature swap"<<std::endl;
+
+  previous_signature = signature;  
+
+  // std::cout<<"again?"<<std::endl;
+
+  
+  size_t i = 0;
+  Payload v = 0;
+  for (auto _ : state) {
+    while (unlikely(i >= probing_set.size())) i -= probing_set.size();
+    const auto searched = probing_set[i++];
+
+    // Lower bound lookup
+    auto it = table->lookUp(searched, v);  
+
+    benchmark::DoNotOptimize(it);
+    // __sync_synchronize();
+    // full_mem_barrier;
+  }
+
+  // set counters (don't do this in inner loop to avoid tainting results)
+  state.counters["table_bytes"] = table->byte_size();
+  state.counters["table_directory_bytes"] = table->directory_byte_size();
+  state.counters["table_bits_per_key"] = 8. * table->byte_size() / dataset_size;
+  state.counters["data_elem_count"] = dataset_size;
+
+  std::stringstream ss;
+  ss << succ_probability;
+  std::string temp = ss.str();
+  state.SetLabel(table->name() + ":" + dataset::name(did) + ":" +
+                 dataset::name(probing_dist)+":"+temp);
+}
+
+#define KAPILBMLudo(Table)                                                         \
+  BENCHMARK_TEMPLATE(PointProbeLudo, Table, 0)                                     \
+      ->ArgsProduct({dataset_sizes, datasets, probe_distributions});
+
+#define BenchmarKapilLudo()                                                         \
+  using KapilLudoTable = LudoTable<Key, Payload>;                                  \
+  KAPILBMLudo(KapilLudoTable);
+
+
+
+
+
+
+
+
+
+
 // ############################## CUCKOO HASHING ##############################
 // ############################## CUCKOO HASHING ##############################
 // ############################## CUCKOO HASHING ##############################
@@ -740,11 +873,10 @@ static void PointProbeCuckoo(benchmark::State& state) {
                  dataset::name(probing_dist)+":"+temp);
 }
 
+
 #define KAPILBMCuckoo(Table)                                                              \
   BENCHMARK_TEMPLATE(PointProbeCuckoo, Table, 0)                                     \
       ->ArgsProduct({dataset_sizes, datasets, probe_distributions,succ_probability});
-
-
 
 
 
@@ -767,7 +899,6 @@ static void PointProbeCuckoo(benchmark::State& state) {
   KAPILBMCuckoo(KapilCuckooModelHashTable##BucketSize##OverAlloc##HashFn##KickingStrat1);
 
 //using RMIHash = learned_hashing::RMIHash<std::uint64_t,100>;
-ControlPlaneLudo<Key, Payload> cp(1024);
 //BenchmarKapilLinearModel(1,34,RMIHash);
 
 

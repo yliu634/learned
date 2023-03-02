@@ -6,8 +6,9 @@
 
 using namespace _;
 
-using RMIHash = learned_hashing::RMIHash<std::uint64_t,100>;
 
+using RMIHash = learned_hashing::RMIHash<std::uint64_t,100>;
+BenchmarKapilLudo();
 BenchmarKapilLinearModel(1,34,RMIHash);
 
 

@@ -16,7 +16,7 @@
 #include "include/cuckoo.hpp"
 #include "include/cuckoo_model.hpp"
 
-#include "include/ludo.hpp"
+#include "include/ludotable.hpp"
 
 // Order is important
 #include "include/convenience/undef.hpp"

@@ -3,6 +3,7 @@ import sys
 
 # hashing functions list
 hash_mapping_dict={
+    "LUDO":"using buitin Ludo ahsing",
     "MURMUR":"using MURMUR = hashing::MurmurFinalizer<Key>;",
     "MultPrime64":"using MultPrime64 = hashing::MultPrime64;",
     "FibonacciPrime64":"using FibonacciPrime64 = hashing::FibonacciPrime64;",
@@ -24,6 +25,7 @@ model_type_dict={
 }
 # hashing schemes
 scheme_dict={
+    "Ludo":"Ludo",
     "Cuckoo":"Cuckoo",
     "Linear":"Linear",
     "Chained":"Chained"
@@ -75,7 +77,7 @@ def kick_line(hashing_scheme,kickinit_strat,kickinit_strat_bias):
 
     return ans_str    
 
-def bench_line(hashing_scheme,model_type,bucket_size,overalloc):
+def bench_line(hashing_scheme,model_type,bucket_size=4,overalloc="N/A"):
 
     ans_str="BenchmarKapil"+scheme_dict[hashing_scheme]+model_type_dict[model_type]
     ans_str+="("+str(bucket_size)+","+str(overalloc)+","+model_name

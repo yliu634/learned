@@ -3,6 +3,15 @@ rm results/results.json
 touch results/results.json
 rm results/log_stats.out
 touch results/log_stats.out
+
+######## LUDO HASHING ##########################
+bucket_size=1
+overalloc=0
+model_name="LUDO"
+#python3 tools/edit_benchmark.py $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024
+bash scripts/run.sh > results/log_stats.out
+
+if false; then
 ######## LEARNED LINEAR PROBING ################
 
 for bucket_size in 1
@@ -14,14 +23,14 @@ do
         do
             echo "Start Here" $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024 > results/results.json
             echo "Start Here" $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024 > results/log_stats.out
-            python3 tools/edit_benchmark.py $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024
-            bash scripts/run.sh > results/log_stats.out
+            #python3 tools/edit_benchmark.py $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024
+            bash scripts/run.sh >> results/log_stats.out
             #cat results/benchmark_result.json >>results/results.json
         done
     done
 done
 
-if false; then
+
 ######## TRADITIONAL LINEAR PROBING ################
 
 for bucket_size in 1

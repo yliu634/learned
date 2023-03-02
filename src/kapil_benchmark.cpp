@@ -307,7 +307,7 @@ void expt_1()
   }
 
 }
-  
+
 
 int main()
 {
