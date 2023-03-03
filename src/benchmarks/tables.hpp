@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../../include/blob/blobstore.hpp"
+#include "../../include/blob/filestore.hpp"
 #include "../../thirdparty/perfevent/PerfEvent.hpp"
 #include "../support/datasets.hpp"
 #include "../support/probing_set.hpp"
