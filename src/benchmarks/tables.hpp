@@ -582,7 +582,8 @@ using namespace masters_thesis;
 
 #define KAPILBM(Table)                                                              \
   BENCHMARK_TEMPLATE(PointProbe, Table, 0)                                     \
-      ->ArgsProduct({dataset_sizes, datasets, probe_distributions,succ_probability});
+      ->ArgsProduct({dataset_sizes, datasets, probe_distributions,succ_probability}) \
+      ->Iterations(200000);
 
 
 
@@ -859,7 +860,8 @@ static void PointLookupLudoFile(benchmark::State& state) {
 
 #define KAPILBMLudo(Table)                                                         \
   BENCHMARK_TEMPLATE(PointLookupLudo, Table, 0)                                     \
-      ->ArgsProduct({dataset_sizes, datasets, probe_distributions});
+      ->ArgsProduct({dataset_sizes, datasets, probe_distributions})                \
+      ->Iterations(200000);
 
 #define BenchmarKapilLudo()                                                         \
   using KapilLudoTable = LudoTable<Key, Payload>;                                  \
@@ -867,7 +869,8 @@ static void PointLookupLudoFile(benchmark::State& state) {
 
 #define KAPILBMLudoFile(Table)                                                    \
   BENCHMARK_TEMPLATE(PointLookupLudoFile, Table, 0)                                     \
-      ->ArgsProduct({dataset_sizes, datasets, probe_distributions});
+      ->ArgsProduct({dataset_sizes, datasets, probe_distributions})              \
+      ->Iterations(200000);
 
 #define BenchmarKapilLudoFile()                                                         \
   using KapilLudoTable = LudoTable<Key, Payload>;                                  \

@@ -16,6 +16,7 @@ public:
   string fileName;
   size_t blockSize;
   recursive_mutex locks[8192];
+  uint32_t disktime = 0;
   // char* data = new char[size];
 
   explicit Storage(string fileName, uint32_t size, size_t blockSize = 4096, uint16_t port = 0) :
@@ -74,8 +75,10 @@ public:
   int stocRead(uint64_t pos, vector<char> &value) {
     // vector<char> buff(blockSize);
     std::lock_guard g(locks[(numLock ++) % 8192]);
+    //disktime ++;
     int nread = pread(storageFile, value.data(), blockSize, pos * blockSize);
-    return 1;
+    //std::cout << "ludo read disk: " << disktime << std::endl;
+    return nread;
   }
 
 private:

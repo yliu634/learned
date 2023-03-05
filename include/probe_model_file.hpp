@@ -28,7 +28,9 @@ class KapilLinearModelHashTableFile {
     
   public:
     Model model;
-  
+    uint32_t disktime = 0;
+    uint32_t lookupCall = 0;
+
   struct Bucket {
     std::array<Key, BucketSize> keys;
     std::array<Payload, BucketSize> payloads;
@@ -457,9 +459,11 @@ class KapilLinearModelHashTableFile {
    *
    * @param key the key to search
    */
-  forceinline int operator[](const Key& key) {
-    
+  
 
+  forceinline int operator[](const Key& key) {
+    // lookupCall ++;
+    // std::cout << "lookup call: " << lookupCall << std::endl;
     // obtain directory bucket
     size_t directory_ind = model(key)%(buckets.size());
 
@@ -468,6 +472,7 @@ class KapilLinearModelHashTableFile {
     //  std::cout<<" key: "<<key<<std::endl;
     //  bool exit=false;
 
+    
     for(;directory_ind<start+50000;)
     {
        auto bucket = &buckets[directory_ind%buckets.size()];
@@ -488,8 +493,10 @@ class KapilLinearModelHashTableFile {
             std::vector<char> buff_(blockSize);
             std::lock_guard g(locks[(numLock ++) % 8192]);
             //std::cout << "This offset would be pos times bz: " << pos <<" x " << blockSize << std::endl;
+            //disktime ++;
             int nread = pread(storageFile, buff_.data(), blockSize, pos * blockSize);
             //std::cout << "read bytes " << nread << " from pread(): " << std::endl;
+            //std::cout << "read disk: " << disktime << std::endl;
             return nread;
           }
         }
