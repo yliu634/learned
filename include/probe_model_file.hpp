@@ -62,6 +62,16 @@ class KapilLinearModelHashTableFile {
         if (b.keys[i] == Sentinel) {
           b.keys[i] = key;
           b.payloads[i] = payload;
+
+          std::vector<char> buffer(sizeof(Payload), '\0');
+          std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
+          std::lock_guard g(locks[(numLock ++) % 8192]);
+          /*std::cout << "Real write in data is: ";
+          for (char& el: buffer) {
+            std::cout << el;
+          }
+          std::cout << std::endl;*/
+          pwrite(storageFile, buffer.data(), sizeof(buffer), payload * blockSize);
           return true;
         }
 
@@ -72,6 +82,11 @@ class KapilLinearModelHashTableFile {
           std::vector<char> buffer(sizeof(Payload), '\0');
           std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
           std::lock_guard g(locks[(numLock ++) % 8192]);
+          /*std::cout << "Real write in data is: ";
+          for (char& el: buffer) {
+            std::cout << el;
+          }
+          std::cout << std::endl;*/
           pwrite(storageFile, buffer.data(), sizeof(buffer), payload * blockSize);
           return true;
         }
@@ -199,26 +214,22 @@ class KapilLinearModelHashTableFile {
     // for (const auto& d : data) insert(d.first, d.second);
 
     // std::random_shuffle(data.begin(), data.end());
-    uint64_t insert_count=1000000;
+    /*uint64_t insert_count=1000000;
 
-    for(uint64_t i=0;i<data.size()-insert_count;i++)
-    {
-      insert(data[i].first, i);
-    }
+    for(uint64_t i=0;i<keys.size()-insert_count;i++) {
+      insert(keys[i], i);
+    }*/
 
  
    
     auto start = std::chrono::high_resolution_clock::now(); 
-
-    for(uint64_t i=data.size()-insert_count;i<data.size();i++)
-    {
-      insert(data[i].first, i+insert_count);
+    for(uint64_t i=0;i<keys.size();i++) {
+      insert(keys[i], i);
     }
-
      auto stop = std::chrono::high_resolution_clock::now(); 
     // auto duration = std::chrono::duration_cast<milliseconds>(stop - start); 
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
-    std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/insert_count << " nanoseconds" << std::endl;
+    std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/size << " nanoseconds" << std::endl;
 
   }
 
@@ -452,11 +463,6 @@ class KapilLinearModelHashTableFile {
     // obtain directory bucket
     size_t directory_ind = model(key)%(buckets.size());
 
-    // if(directory_ind>0)
-    // {
-    //   return end();
-    // }
-
     auto start=directory_ind;
 
     //  std::cout<<" key: "<<key<<std::endl;
@@ -479,12 +485,17 @@ class KapilLinearModelHashTableFile {
             return 0;
           }
           if (current_key == key) {
-            Key kread;
             Payload pos = bucket->payloads[i];
-            std::vector<char> buff_;
+            std::vector<char> buff_(blockSize);
             std::lock_guard g(locks[(numLock ++) % 8192]);
+            std::cout << "This offset would be pos times bz: " << pos <<" x " << blockSize << std::endl;
             int nread = pread(storageFile, buff_.data(), blockSize, pos * blockSize);
-            std::cout << "read bytes " << nread << " from pread() " << std::endl;
+            std::cout << "read bytes " << nread << " from pread(): ";
+            for (char &c : buff_) {
+              std::cout << c;
+            }
+            std::cout << std::endl;
+
             return nread;
           }
         }

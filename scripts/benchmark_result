@@ -1,4 +1,4 @@
-2023-03-04T19:57:46-05:00
+2023-03-05T02:50:04-05:00
 Running ../cmake-build-release/src/benchmarks
 Run on (24 X 3200 MHz CPU s)
 CPU Caches:
@@ -6,20 +6,11 @@ CPU Caches:
   L1 Instruction 32 KiB (x12)
   L2 Unified 256 KiB (x12)
   L3 Unified 15360 KiB (x2)
-Load Average: 0.00, 0.04, 0.14
+Load Average: 0.28, 0.34, 0.32
 ***WARNING*** CPU scaling is enabled, the benchmark real time measurements may be noisy and will incur extra overhead.
 ---------------------------------------------------------------------------------------------------------------------------------
 Benchmark                                                                       Time             CPU   Iterations UserCounters...
 ---------------------------------------------------------------------------------------------------------------------------------
-PointLookupLudo<KapilLudoTable, 0>/1000000/5/0                               36.6 ns         36.6 ns     19104874 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:wiki:uniform:49
-PointLookupLudo<KapilLudoTable, 0>/1000000/2/0                               36.7 ns         36.7 ns     19003747 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:uniform:uniform:97
-PointLookupLudo<KapilLudoTable, 0>/1000000/0/0                               36.9 ns         36.9 ns     18883023 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:seq:uniform:97
-PointLookupLudoFile<KapilLudoTable, 0>/1000000/5/0                           2076 ns         2075 ns       379073 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:wiki:uniform:97
-PointLookupLudoFile<KapilLudoTable, 0>/1000000/2/0                           2066 ns         2065 ns       376429 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:uniform:uniform:97
-PointLookupLudoFile<KapilLudoTable, 0>/1000000/0/0                           2056 ns         2056 ns       372826 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:seq:uniform:81
-PointProbe<KapilLinearModelHashTable134RMIHash, 0>/1000000/5/0/100            769 ns          769 ns       910617 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTable<8, 8, 1, rmi_hash_100>:wiki:uniform:100
-PointProbe<KapilLinearModelHashTable134RMIHash, 0>/1000000/2/0/100           91.7 ns         91.7 ns      7521778 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTable<8, 8, 1, rmi_hash_100>:uniform:uniform:100
-PointProbe<KapilLinearModelHashTable134RMIHash, 0>/1000000/0/0/100           54.7 ns         54.7 ns     12472847 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTable<8, 8, 1, rmi_hash_100>:seq:uniform:100
-PointProbe<KapilLinearModelHashTableFile134RMIHash, 0>/1000000/5/0/100       3206 ns         3206 ns       223036 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTableFile<8, 8, 1, rmi_hash_100>:wiki:uniform:100
-PointProbe<KapilLinearModelHashTableFile134RMIHash, 0>/1000000/2/0/100       2991 ns         2991 ns       236860 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTableFile<8, 8, 1, rmi_hash_100>:uniform:uniform:100
-PointProbe<KapilLinearModelHashTableFile134RMIHash, 0>/1000000/0/0/100       3031 ns         3031 ns       238851 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTableFile<8, 8, 1, rmi_hash_100>:seq:uniform:100
+PointProbe<KapilLinearModelHashTableFile134RMIHash, 0>/1000000/5/0/100      18338 ns        18337 ns        38606 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTableFile<8, 8, 1, rmi_hash_100>:wiki:uniform:100
+PointProbe<KapilLinearModelHashTableFile134RMIHash, 0>/1000000/2/0/100      17552 ns        17551 ns        40083 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTableFile<8, 8, 1, rmi_hash_100>:uniform:uniform:100
+PointProbe<KapilLinearModelHashTableFile134RMIHash, 0>/1000000/0/0/100      17518 ns        17518 ns        40585 data_elem_count=1000k table_bits_per_key=257.28 table_bytes=32.16M table_directory_bytes=32.16M KapilLinearModelHashTableFile<8, 8, 1, rmi_hash_100>:seq:uniform:100
