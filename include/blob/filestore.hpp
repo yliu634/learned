@@ -50,9 +50,6 @@ public:
     buff_ = vector<char>(blockSize);
     //dis_ = new uniform_int_distribution<>(0, 255);
 
-    /*for (std::size_t i = 0; i < size; ++i) {
-            data[i] = static_cast<char>(dis(gen_));
-    }*/
   }
   
   ~Storage() {
@@ -64,8 +61,7 @@ public:
   }
   
   int stocInsert(uint64_t pos, vector<char> & value) {
-    mylock_guard g(locks[(numLock ++) % 8192]);
-    //addrChange(pos);
+    std::lock_guard g(locks[(numLock ++) % 8192]);
     pwrite(storageFile, value.data(), blockSize, pos * blockSize);
     return 1;
   }
@@ -76,9 +72,8 @@ public:
   }
 
   int stocRead(uint64_t pos, vector<char> & value) {
-    // addrChange(pos);
     // vector<char> buff(blockSize);
-    mylock_guard g(locks[(numLock ++) % 8192]);
+    std::lock_guard g(locks[(numLock ++) % 8192]);
     pread(storageFile, value.data(), blockSize, pos * blockSize);
     return 1;
   }

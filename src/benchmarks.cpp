@@ -10,11 +10,13 @@ using namespace _;
 
 
 using RMIHash = learned_hashing::RMIHash<std::uint64_t,100>;
-//BenchmarKapilLudo();
+using MWHC = exotic_hashing::MWHC<Key>;
+BenchmarKapilLudo();
 BenchmarKapilLudoFile();
-//std::this_thread::sleep_for(std::chrono::seconds(5));
 BenchmarKapilLinearModel(1,34,RMIHash);
-
+BenchmarKapilLinearModelFile(1,34,RMIHash);
+//BenchmarKapilLinearExotic(1,34,MWHC);
+//BenchmarKapilLinearExoticFile(1,34,MWHC);
 
 
 BENCHMARK_MAIN();

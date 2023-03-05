@@ -745,6 +745,13 @@ const std::vector<std::int64_t> overalloc_chain{10,25,50,100};
   using KapilLinearModelHashTable##BucketSize##OverAlloc##Model = KapilLinearModelHashTable<Key, Payload, BucketSize,OverAlloc, Model>; \
   KAPILBM(KapilLinearModelHashTable##BucketSize##OverAlloc##Model);
 
+#define BenchmarKapilLinearModelFile(BucketSize,OverAlloc,Model)                           \
+  using KapilLinearModelHashTableFile##BucketSize##OverAlloc##Model = KapilLinearModelHashTableFile<Key, Payload, BucketSize,OverAlloc, Model>; \
+  KAPILBM(KapilLinearModelHashTableFile##BucketSize##OverAlloc##Model);
+
+#define BenchmarKapilLinearExoticFile(BucketSize,OverAlloc,MMPHF)                           \
+  using KapilLinearExoticHashTableFile##BucketSize##MMPHF = KapilLinearExoticHashTableFile<Key, Payload, BucketSize,OverAlloc, MMPHF>; \
+  KAPILBM(KapilLinearExoticHashTableFile##BucketSize##MMPHF);
 
 
 // ############################## SINGLE LUDOTABLE ##############################

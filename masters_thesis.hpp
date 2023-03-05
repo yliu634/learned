@@ -5,12 +5,15 @@
 
 
 #include "include/chained.hpp"
-#include "include/chained_exotic.hpp"
 #include "include/chained_model.hpp"
+#include "include/chained_exotic.hpp"
+
 
 #include "include/probe.hpp"
-#include "include/probe_exotic.hpp"
 #include "include/probe_model.hpp"
+#include "include/probe_model_file.hpp"
+#include "include/probe_exotic.hpp"
+#include "include/probe_exotic_file.hpp"
 
 
 #include "include/cuckoo.hpp"

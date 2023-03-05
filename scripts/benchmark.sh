@@ -5,10 +5,6 @@ rm results/log_stats.out
 touch results/log_stats.out
 
 ######## LUDO HASHING ##########################
-bucket_size=1
-overalloc=0
-model_name="LUDO"
-#python3 tools/edit_benchmark.py $bucket_size $overalloc $model_name "Model" "Linear" "Balanced" 0 100 1024
 bash scripts/run.sh > results/log_stats.out
 
 if false; then
