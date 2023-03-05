@@ -169,7 +169,7 @@ class KapilLinearModelHashTableFile {
     }
     ofs.close();
 
-    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT | O_SYNC | O_DIRECT, 0666);
+    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT, 0666);// | O_SYNC | O_DIRECT, 0666);
     ftruncate(storageFile, size * blockSize);
     numLock = 0;
 
@@ -481,27 +481,18 @@ class KapilLinearModelHashTableFile {
           const auto& current_key = bucket->keys[i];
           // std::cout<<current_key<<" match "<<key<<std::endl;
           if (current_key == Sentinel) {
-           
             return 0;
           }
           if (current_key == key) {
             Payload pos = bucket->payloads[i];
             std::vector<char> buff_(blockSize);
             std::lock_guard g(locks[(numLock ++) % 8192]);
-            std::cout << "This offset would be pos times bz: " << pos <<" x " << blockSize << std::endl;
+            //std::cout << "This offset would be pos times bz: " << pos <<" x " << blockSize << std::endl;
             int nread = pread(storageFile, buff_.data(), blockSize, pos * blockSize);
-            std::cout << "read bytes " << nread << " from pread(): ";
-            for (char &c : buff_) {
-              std::cout << c;
-            }
-            std::cout << std::endl;
-
+            //std::cout << "read bytes " << nread << " from pread(): " << std::endl;
             return nread;
           }
         }
-      
-
-      // exit=false;
 
       directory_ind++;
       

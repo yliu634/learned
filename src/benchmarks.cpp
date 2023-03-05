@@ -11,9 +11,9 @@ using namespace _;
 
 using RMIHash = learned_hashing::RMIHash<std::uint64_t,100>;
 using MWHC = exotic_hashing::MWHC<Key>;
-//BenchmarKapilLudo();
-//BenchmarKapilLudoFile();
-//BenchmarKapilLinearModel(1,34,RMIHash);
+BenchmarKapilLudo();
+BenchmarKapilLudoFile();
+BenchmarKapilLinearModel(1,34,RMIHash);
 BenchmarKapilLinearModelFile(1,34,RMIHash);
 //BenchmarKapilLinearExotic(1,34,MWHC);
 //BenchmarKapilLinearExoticFile(1,34,MWHC);

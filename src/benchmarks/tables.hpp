@@ -437,126 +437,6 @@ static void PointProbe(benchmark::State& state) {
 }
 
 
-template <class Table, size_t RangeSize>
-static void PointProbeFile(benchmark::State& state) {
-  // Extract variables
-  const auto dataset_size = static_cast<size_t>(state.range(0));
-  const auto did = static_cast<dataset::ID>(state.range(1));
-  const auto probing_dist =
-      static_cast<dataset::ProbingDistribution>(state.range(2));
-   const auto succ_probability =
-      static_cast<size_t>(state.range(3)); 
-         
-  // google benchmark will run a benchmark function multiple times
-  // to determine, amongst other things, the iteration count for
-  // the benchmark loop. Technically, BM functions must be pure. However,
-  // since this setup logic is very expensive, we cache setup based on
-  // a unique signature containing all parameters.
-  // NOTE: google benchmark's fixtures suffer from the same
-  // 'execute setup multiple times' issue:
-  // https://github.com/google/benchmark/issues/952
-  uint32_t blockSize(512);
-  std::string filepath = "../datasets/oneFile.txt";
-  filestore::Storage stoc(filepath, dataset_size, blockSize); //filename & ds_size, blocksize could be ignored.
-
-  std::string signature =
-      std::string(typeid(Table).name()) + "_" + std::to_string(RangeSize) +
-      "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
-      dataset::name(probing_dist);
-
-  if(previous_signature!=signature) 
-  {
-    std::cout<<"Probing set size is: "<<probing_set.size()<<std::endl;
-    std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
-  }
-     
-  if (previous_signature != signature) {
-    std::cout << "performing setup... ";
-    auto start = std::chrono::steady_clock::now();
-
-    // Generate data (keys & payloads) & probing set
-    std::vector<std::pair<Key, Payload>> data{};
-    data.reserve(dataset_size);
-    {
-      auto keys = dataset::load_cached<Key>(did, dataset_size);
-      uint64_t index(0);
-      std::transform(
-          keys.begin(), keys.end(), std::back_inserter(data),
-          [&index](const Key& key) { return std::make_pair(key, index ++); });
-      // int succ_probability=100;
-      probing_set = dataset::generate_probing_set(keys, probing_dist,succ_probability);
-    }
-
-    if (data.empty()) {
-      // otherwise google benchmark produces an error ;(
-      for (auto _ : state) {
-      }
-      std::cout << "failed" << std::endl;
-      return;
-    }
-
-    // build table
-    if (prev_table != nullptr) free_lambda();
-    prev_table = new Table(data);
-    free_lambda = []() { delete ((Table*)prev_table); };
-
-    // measure time elapsed
-    const auto end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> diff = end - start;
-    std::cout << "succeeded in " << std::setw(9) << diff.count() << " seconds"
-              << std::endl;
-    
-    std::sort(data.begin(), data.end(),[](const auto& a, const auto& b) { return a.first < b.first; });
-    std::cout<<std::endl<<"Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
-    // table->print_data_statistics();
-
-    Table* table = (Table*)prev_table;
-
-    table->print_data_statistics();
-
-    uint64_t total_sum=0;
-    uint64_t query_count=100000;
-
-  }
-  
-  assert(prev_table != nullptr);
-  Table* table = (Table*)prev_table;
-  previous_signature = signature;  
-
-  size_t i = 0;
-  Payload pos = 0;
-  vector<char> value;
-
-  for (auto _ : state) {
-    while (unlikely(i >= probing_set.size())) i -= probing_set.size();
-    const auto searched = probing_set[i%probing_set.size()];
-    i++;
-
-    // Lower bound lookup
-    // auto it = table->useless_func();
-    auto it = table->operator[](searched);  
-                    // https://stackoverflow.com/questions/10631283/how-will-i-know-whether-inline-function-is-actually-replaced-at-the-place-where
-    
-    stoc.stocRead(it, value);
-    
-    benchmark::DoNotOptimize(it);
-    // __sync_synchronize();
-    // full_mem_barrier;
-  }
-
-  // set counters (don't do this in inner loop to avoid tainting results)
-  state.counters["table_bytes"] = table->byte_size();
-  state.counters["table_directory_bytes"] = table->directory_byte_size();
-  state.counters["table_bits_per_key"] = 8. * table->byte_size() / dataset_size;
-  state.counters["data_elem_count"] = dataset_size;
-
-  std::stringstream ss;
-  ss << succ_probability;
-  std::string temp = ss.str();
-  state.SetLabel(table->name() + ":" + dataset::name(did) + ":" +
-                 dataset::name(probing_dist)+":"+temp);
-}
-
 
 template <class Table, size_t RangeSize>
 static void CollisionStats(benchmark::State& state) {
@@ -949,7 +829,7 @@ static void PointLookupLudoFile(benchmark::State& state) {
   
   size_t i = 0;
   Payload pos = 0;
-  vector<char> value;
+  vector<char> value(blockSize);
   for (auto _ : state) {
     while (unlikely(i >= probing_set.size())) i -= probing_set.size();
     const auto searched = probing_set[i++];

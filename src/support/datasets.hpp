@@ -139,7 +139,7 @@ inline std::string name(ID id) {
 
 template <class Data = std::uint64_t>
 std::vector<Data> load_cached(ID id, size_t dataset_size) {
-  std::string datasets_path = "/users/yiliu124/learned/datasets/";
+  std::string datasets_path = "/home/yiliu/build/learned/datasets/";
 
   static std::random_device rd;
   static std::default_random_engine rng(rd());

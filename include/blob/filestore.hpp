@@ -43,7 +43,7 @@ public:
     //std::uintmax_t fileSize = boost::filesystem::file_size(filePath);
     //std::cout << "After writing file size: " << fileSize << " bytes" << std::endl;
 
-    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT | O_SYNC | O_DIRECT, 0666);
+    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT, 0666);
     ftruncate(storageFile, size * blockSize);
     
     numLock = 0;
@@ -71,10 +71,10 @@ public:
     return 1;
   }
 
-  int stocRead(uint64_t pos, vector<char> & value) {
+  int stocRead(uint64_t pos, vector<char> &value) {
     // vector<char> buff(blockSize);
     std::lock_guard g(locks[(numLock ++) % 8192]);
-    pread(storageFile, value.data(), blockSize, pos * blockSize);
+    int nread = pread(storageFile, value.data(), blockSize, pos * blockSize);
     return 1;
   }
 
