@@ -7,6 +7,8 @@ touch results/log_stats.out
 ######## LUDO HASHING ##########################
 bash scripts/run.sh > results/log_stats.out
 
+
+
 if false; then
 ######## LEARNED LINEAR PROBING ################
 

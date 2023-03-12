@@ -53,14 +53,10 @@ class KapilLinearHashTable {
         }
       }
 
-
       return false;
-
-
 
       // previous = current;
       
-
       // static var will be shared by all instances
       // previous->next = tape.alloc();
       // previous->next->insert(key, payload, tape);
@@ -155,8 +151,7 @@ class KapilLinearHashTable {
     std::random_shuffle(data.begin(), data.end());
     uint64_t insert_count=1000000;
 
-    for(uint64_t i=0;i<data.size()-insert_count;i++)
-    {
+    for(uint64_t i=0;i<data.size()-insert_count;i++) {
       insert(data[i].first,data[i].second);
     }
 
@@ -164,8 +159,7 @@ class KapilLinearHashTable {
    
     auto start = std::chrono::high_resolution_clock::now(); 
 
-    for(uint64_t i=data.size()-insert_count;i<data.size();i++)
-    {
+    for(uint64_t i=data.size()-insert_count;i<data.size();i++) {
       insert(data[i].first,data[i].second);
     }
 

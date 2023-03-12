@@ -1,5 +1,5 @@
 #pragma once
-
+#define _GNU_SOURCE
 #include <immintrin.h>
 
 #include <algorithm>
@@ -20,16 +20,16 @@
 
 namespace masters_thesis {
 template <class Key, class Payload, size_t BucketSize, size_t OverAlloc,
-          class MMPHF,
+          class HashFn,
           bool ManualPrefetch = false,
           Key Sentinel = std::numeric_limits<Key>::max(),
           size_t blockSize = 512>
-class KapilLinearExoticHashTableFile {
+class KapilLinearHashTableFile {
     
-    public:
-    MMPHF mmphf; 
+  public:
+    const HashFn hashfn;
     uint32_t disktime = 0;
-    uint32_t lookupCall = 0;
+    uint32_t lookupCall = 0; 
 
   struct Bucket {
     std::array<Key, BucketSize> keys;
@@ -49,6 +49,7 @@ class KapilLinearExoticHashTableFile {
   /// directory of buckets
   std::vector<Bucket> buckets;
   bool disablelogging  = true;
+
   /// model for predicting the correct index
 //   Model model;
 
@@ -57,23 +58,12 @@ class KapilLinearExoticHashTableFile {
 
   bool bucketInsert(Bucket& b, const Key& key, const Payload& payload,
                 support::Tape<Bucket>& tape) {
-
+      
       for (size_t i = 0; i < BucketSize; i++) {
-        if (b.keys[i] == Sentinel) {
+        if (b.keys[i] == Sentinel || b.keys[i] == key) {
           b.keys[i] = key;
           b.payloads[i] = payload;
-
-          std::vector<char> buffer(sizeof(Payload), '\0');
-          std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
-          std::lock_guard g(locks[(numLock ++) % 8192]);
-          pwrite(storageFile, buffer.data(), sizeof(buffer), payload * blockSize);
-          return true;
-        }
-
-        if (b.keys[i] == key) {
-          b.keys[i] = key;
-          b.payloads[i] = payload;
-
+          
           std::vector<char> buffer(sizeof(Payload), '\0');
           std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
           std::lock_guard g(locks[(numLock ++) % 8192]);
@@ -81,9 +71,9 @@ class KapilLinearExoticHashTableFile {
           return true;
         }
       }
-
       return false;
     }
+
 
   /**
    * Inserts a given (key,payload) tuple into the hashtable.
@@ -93,19 +83,19 @@ class KapilLinearExoticHashTableFile {
    * construction interface.
    */
 
-
   forceinline void insert(const Key& key, const Payload& payload) {
-    auto index = mmphf(key)%(buckets.size());
+    auto index = hashfn(key)%(buckets.size());
     assert(index >= 0);
     assert(index < buckets.size());
     auto start=index;
 
-    for(;(index-start<50000);) {
+    for(;(index-start<50000);)
+    {
       // std::cout<<"index: "<<index<<std::endl;
       if(bucketInsert(buckets[index%buckets.size()], key, payload, *tape)) {
         return;
-      } else {
-        index ++;
+      } else{
+        index++;
       }
     }
 
@@ -121,19 +111,16 @@ class KapilLinearExoticHashTableFile {
   std::recursive_mutex locks[8192];
   int numLock = 0;
 
- public:
-  KapilLinearExoticHashTableFile() = default;
+  KapilLinearHashTableFile() = default;
 
   /**
-   * Constructs a KapilLinearExoticHashTableFile given a list of keys
+   * Constructs a KapilLinearHashTableFile given a list of keys
    * together with their corresponding payloads
    */
-  KapilLinearExoticHashTableFile(std::vector<std::pair<Key, Payload>> data,
-                                 std::string fileName = "../datasets/oneFile.txt")
-      : tape(std::make_unique<support::Tape<Bucket>>()), 
-        fileName(fileName) {
+  KapilLinearHashTableFile(std::vector<std::pair<Key, Payload>> data,
+                           std::string fileName = "../datasets/oneFile.txt")
+      :tape(std::make_unique<support::Tape<Bucket>>()), fileName(fileName) {
 
-    
     dataSize = data.size();
     size_t num_bytes = dataSize * blockSize;
     std::ofstream ofs(fileName, std::ios::out|std::ios::binary);
@@ -152,19 +139,16 @@ class KapilLinearExoticHashTableFile {
         }
     }
     ofs.close();
-
-    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT, 0666);
+    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT | O_SYNC, O_DIRECT, 0666);
     ftruncate(storageFile, dataSize * blockSize);
     numLock = 0;
-
 
 
     if (OverAlloc<10000) {
       buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
     } else {
       buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
-    }   
-            
+    }               
     // ensure data is sorted
     std::sort(data.begin(), data.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
@@ -175,47 +159,40 @@ class KapilLinearExoticHashTableFile {
     std::transform(data.begin(), data.end(), std::back_inserter(keys),
                    [](const auto& p) { return p.first; });
 
-  
     // train model on sorted data
     // model.train(keys.begin(), keys.end(), buckets.size());
-    mmphf.construct(keys.begin(), keys.end());
 
     // insert all keys according to model prediction.
     // since we sorted above, this will permit further
     // optimizations during lookup etc & enable implementing
     // efficient iterators in the first place.
     // for (const auto& d : data) insert(d.first, d.second);
-
+    
     //std::random_shuffle(data.begin(), data.end());
-       
-    //boost::filesystem::path filePath(fileName);
-    //std::uintmax_t fileSize = boost::filesystem::file_size(filePath);
-    //std::cout << "After writing file size: " << fileSize << " bytes" << std::endl;
+    //uint64_t insert_count=1000000;
 
     auto start = std::chrono::high_resolution_clock::now(); 
 
-    for(uint64_t i=0; i<keys.size(); i++) {
-      insert(keys[i], i);
+    for(uint64_t i=0;i<data.size();i++) {
+      insert(data[i].first, i);
     }
 
     auto stop = std::chrono::high_resolution_clock::now(); 
-    // auto duration = std::chrono::duration_cast<milliseconds>(stop - start); 
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
     std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/dataSize << " nanoseconds" << std::endl;
-
   }
 
-  ~KapilLinearExoticHashTableFile(){
+  ~KapilLinearHashTableFile(){
     close(storageFile);
   }
 
   class Iterator {
     size_t directory_ind, bucket_ind;
     Bucket const* current_bucket;
-    const KapilLinearExoticHashTableFile& hashtable;
+    const KapilLinearHashTableFile& hashtable;
 
     Iterator(size_t directory_ind, size_t bucket_ind, Bucket const* bucket,
-             const KapilLinearExoticHashTableFile& hashtable)
+             const KapilLinearHashTableFile& hashtable)
         : directory_ind(directory_ind),
           bucket_ind(bucket_ind),
           current_bucket(bucket),
@@ -261,7 +238,6 @@ class KapilLinearExoticHashTableFile {
       return *this;
     }
 
-
     forceinline bool operator==(const Iterator& other) const {
       return directory_ind == other.directory_ind &&
              bucket_ind == other.bucket_ind &&
@@ -269,8 +245,7 @@ class KapilLinearExoticHashTableFile {
              &hashtable == &other.hashtable;
     }
 
-    friend class KapilLinearExoticHashTableFile;
-
+    friend class KapilLinearHashTableFile;
   };
 
   /**
@@ -280,9 +255,6 @@ class KapilLinearExoticHashTableFile {
     return {buckets.size(), 0, nullptr, *this};
   }
 
-  forceinline int hash_val(const Key& key) {
-    return mmphf(key);
-  }
 
   void print_data_statistics() {
     std::vector<uint64_t> dist_from_ideal;
@@ -305,7 +277,7 @@ class KapilLinearExoticHashTableFile {
             break;
           }
 
-          size_t directory_ind = mmphf(current_key)%(buckets.size());
+          size_t directory_ind = hashfn(current_key)%(buckets.size());
           // std::cout<<" pred val: "<<directory_ind<<" key val: "<<current_key<<" bucket val: "<<buck_ind<<std::endl;
           dist_from_ideal.push_back(directory_ind-buck_ind);
         }
@@ -400,12 +372,21 @@ class KapilLinearExoticHashTableFile {
 
     return;
 
+
+
   }
 
-   int useless_func()
+  forceinline int hash_val(const Key& key)
+  {
+    return hashfn(key);
+  }
+
+
+  int useless_func()
   {
     return 0;
   }
+
 
 
 
@@ -426,9 +407,11 @@ class KapilLinearExoticHashTableFile {
     // };
 
     // obtain directory bucket
-    size_t directory_ind = mmphf(key)%(buckets.size());
+    size_t directory_ind = hashfn(key)%(buckets.size());
 
     auto start=directory_ind;
+
+    // std::cout<<" key: "<<key<<std::endl;
 
     for(;directory_ind<start+50000;)
     {
@@ -436,30 +419,42 @@ class KapilLinearExoticHashTableFile {
 
       // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
       // this nested loop construction anyways.
-        // bool exit=false;
-        for (size_t i = 0; i < BucketSize; i++) {
+
+      // std::cout<<"probe rate: "<<directory_ind+1-start<<std::endl;
+      // bool exit=false;
+        for (size_t i = 0; i < BucketSize; i++)
+       {
           const auto& current_key = bucket->keys[i];
           if (current_key == Sentinel) {
             return 0;
             // return end();
-          }
-          if (current_key == key) {
-            Key kread;
-            Payload pos = bucket->payloads[i];
-            std::vector<char> buff_;
-            int nread = pread(storageFile, buff_.data(), blockSize, pos * blockSize);
-            return nread;
+            }
+          if (current_key == key){ 
+            return 1;
+            // return {directory_ind, i, bucket, *this};
           }
         }
+      // if(exit)
+      // {
+      //   break;
+      // }
+      directory_ind++;  
 
-      directory_ind++;   
+      //   prefetch_next(bucket);
+      
     }
+
+   
+    //  while(true)
+    //  {
+    //    std::cout<<"ERROR"<<std::endl;
+    //  }
     return 0;
   }
 
   int lookUp(const Key& key, std::vector<char>& value) {
     assert(key != Sentinel);
-    size_t directory_ind = mmphf(key)%(buckets.size());
+    size_t directory_ind = hashfn(key)%(buckets.size());
 
     auto start=directory_ind;
 
@@ -475,9 +470,10 @@ class KapilLinearExoticHashTableFile {
             return 0;
           }
           if (current_key == key) {
-            Key kread;
             Payload pos = bucket->payloads[i];
-            int nread = pread(storageFile, value.data(), sizeof(value), pos * blockSize);
+            void *buf;
+            posix_memalign(&buf, 512, 512);
+            int nread = pread(storageFile, buf, blockSize, pos * blockSize);
             return nread;
           }
         }
@@ -488,9 +484,9 @@ class KapilLinearExoticHashTableFile {
 
   std::string name() {
     std::string prefix = (ManualPrefetch ? "Prefetched" : "");
-    return prefix + "KapilLinearExoticHashTableFile<" + std::to_string(sizeof(Key)) + ", " +
+    return prefix + "KapilLinearHashTableFile<" + std::to_string(sizeof(Key)) + ", " +
            std::to_string(sizeof(Payload)) + ", " + std::to_string(BucketSize) +
-           ", " + mmphf.name() + ">";
+           ", " + hashfn.name() + ">";
   }
 
   size_t directory_byte_size() const {
@@ -499,7 +495,7 @@ class KapilLinearExoticHashTableFile {
     return directory_bytesize;
   }
 
-  //kapil_change: assuming model size to be zero  
+  //kapil_change: assuming model size to be zero ; Yi goes: what? 
   size_t model_byte_size() const { return 0; }
 
   size_t byte_size() const { return model_byte_size() + directory_byte_size(); }

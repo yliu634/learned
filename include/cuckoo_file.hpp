@@ -18,6 +18,11 @@
 #include <vector>
 #include <immintrin.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstdint>
+
+#include "cuckoo.hpp"
 #include "convenience/builtins.hpp"
 
 namespace kapilhashtable {
@@ -25,7 +30,7 @@ namespace kapilhashtable {
     * Place entry in bucket with more available space.
     * If both are full, kick from either bucket with 50% chance
     */
-   struct KapilBalancedKicking {
+   /*struct KapilBalancedKicking {
      private:
       std::mt19937 rand_;
 
@@ -60,8 +65,8 @@ namespace kapilhashtable {
          Payload victim_payload = victim_bucket->slots[victim_index].payload;
          victim_bucket->slots[victim_index] = {.key = key, .payload = payload};
          return std::make_optional(std::make_pair(victim_key, victim_payload));
-      };
-   };
+      }
+   };*/
 
    /**
     * if primary bucket has space, place entry in there
@@ -70,7 +75,7 @@ namespace kapilhashtable {
     *
     * @tparam Bias chance that element is kicked from second bucket in percent (i.e., value of 10 -> 10%)
     */
-   template<uint8_t Bias>
+   /*template<uint8_t Bias>
    struct KapilBiasedKicking {
      private:
       std::mt19937 rand_;
@@ -108,8 +113,8 @@ namespace kapilhashtable {
          Payload victim_payload = victim_bucket->slots[victim_index].payload;
          victim_bucket->slots[victim_index] = {.key = key, .payload = payload};
          return std::make_optional(std::make_pair(victim_key, victim_payload));
-      };
-   };
+      }
+   };*/
 
    /**
     * if primary bucket has space, place entry in there
@@ -119,11 +124,19 @@ namespace kapilhashtable {
    using KapilUnbiasedKicking = KapilBiasedKicking<0>;
 
    template<class Key, class Payload, size_t BucketSize, size_t OverAlloc, class HashFn1, class HashFn2, 
-      class KickingFn, Key Sentinel = std::numeric_limits<Key>::max()>
-    class KapilCuckooHashTable {
+      class KickingFn, Key Sentinel = std::numeric_limits<Key>::max(), size_t blockSize = 512>
+    class KapilCuckooHashTableFile {
      public:
       using KeyType = Key;
       using PayloadType = Payload;
+      uint32_t disktime = 0;
+      uint32_t lookupCall = 0; 
+
+      int storageFile = -1;
+      uint32_t dataSize;
+      std::string fileName;
+      std::recursive_mutex locks[8192];
+      int numLock = 0;
 
      private:
       const size_t MaxKickCycleLength;
@@ -146,86 +159,141 @@ namespace kapilhashtable {
 
       std::mt19937 rand_; // RNG for moving items around
 
-     public:
-      KapilCuckooHashTable(std::vector<std::pair<Key, Payload>> data)
-         : MaxKickCycleLength(50000) {
-
-         if (OverAlloc<10000)
-         {
-            buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
-         } 
-         else
-         {
-            buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
-         }         
-         std::sort(data.begin(), data.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
-
-         // obtain list of keys -> necessary for model training
-         std::vector<Key> keys;
-         keys.reserve(data.size());
-         std::transform(data.begin(), data.end(), std::back_inserter(keys),
-                        [](const auto& p) { return p.first; });
+   public:
+   KapilCuckooHashTableFile(std::vector<std::pair<Key, Payload>> data,
+                            std::string fileName = "../datasets/oneFile.txt")
+         : MaxKickCycleLength(50000), fileName(fileName) {
 
 
-         // std::cout<<std::endl<<"Start Here "<<BucketSize<<" "<<OverAlloc<<" "<<hashfn.name()<<" Traditional Cuckoo Biased 5 "<<0<<" 0"<<std::endl<<std::endl;
-            
-
-         // train model on sorted data
-         // model.train(keys.begin(), keys.end(), buckets.size());
-
-         // insert all keys according to model prediction.
-         // since we sorted above, this will permit further
-         // optimizations during lookup etc & enable implementing
-         // efficient iterators in the first place.
-         // for (const auto& d : data) insert(d.first, d.second);
-
-         //std::random_shuffle(data.begin(), data.end());
-         //uint64_t insert_count=1000000;
-
-         //for(uint64_t i=0;i<data.size()-insert_count;i++) {
-         //   insert(data[i].first,data[i].second);
-         //}
-
-         auto start = std::chrono::high_resolution_clock::now(); 
-
-         for(uint64_t i=0;i<data.size();i++)
-         {
-            insert(data[i].first, i);
-         }
-
-         auto stop = std::chrono::high_resolution_clock::now(); 
-         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
-         std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/data.size() << " nanoseconds" << std::endl;
-
+      dataSize = data.size();
+      size_t num_bytes = dataSize * blockSize;
+      std::ofstream ofs(fileName, std::ios::out|std::ios::binary);
+      if (!ofs) {
+         std::cerr << "Error: failed to open file \"" << fileName << "\"\n";
+         return;
       }
+      std::vector<char> buffer(1024 * 1024, '\0'); // 1 MB buffer
+      while (num_bytes > 0) {
+         std::size_t bytes_to_write = std::min(buffer.size(), num_bytes);
+         ofs.write(buffer.data(), bytes_to_write);
+         num_bytes -= bytes_to_write;
+         if (!ofs) {
+            std::cerr << "Error: could not write to file '" << fileName << "'\n";
+            return;
+         }
+      }
+      ofs.close();
+      storageFile = open(fileName.c_str(), O_RDWR | O_CREAT, 0666);
+      ftruncate(storageFile, dataSize * blockSize);
+      numLock = 0;
+      
+
+      if (OverAlloc<10000) {
+         buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
+      } else {
+         buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
+      }         
+      std::sort(data.begin(), data.end(),
+         [](const auto& a, const auto& b) { return a.first < b.first; });
+
+      // obtain list of keys -> necessary for model training
+      std::vector<Key> keys;
+      keys.reserve(data.size());
+      std::transform(data.begin(), data.end(), std::back_inserter(keys),
+                     [](const auto& p) { return p.first; });
+
+
+      // std::cout<<std::endl<<"Start Here "<<BucketSize<<" "<<OverAlloc<<" "<<hashfn.name()<<" Traditional Cuckoo Biased 5 "<<0<<" 0"<<std::endl<<std::endl;
+         
+
+      // train model on sorted data
+      // model.train(keys.begin(), keys.end(), buckets.size());
+
+      // insert all keys according to model prediction.
+      // since we sorted above, this will permit further
+      // optimizations during lookup etc & enable implementing
+      // efficient iterators in the first place.
+      // for (const auto& d : data) insert(d.first, d.second);
+
+      //std::random_shuffle(data.begin(), data.end());
+      //uint64_t insert_count=1000000;
+
+      //for(uint64_t i=0;i<data.size()-insert_count;i++) {
+      //   insert(data[i].first,data[i].second);
+      //}
+
+      auto start = std::chrono::high_resolution_clock::now(); 
+
+      for(uint64_t i=0;i<data.size();i++) {
+         insert(data[i].first, i);
+      }
+
+      auto stop = std::chrono::high_resolution_clock::now(); 
+      auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+      std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/data.size() << " nanoseconds" << std::endl;
+
+   }
+
+   ~KapilCuckooHashTableFile(){
+      close(storageFile);
+   }
 
    int lookup(const Key& key) const {
-         const auto h1 = hashfn1(key);
-         const auto i1 = h1%buckets.size();
+      const auto h1 = hashfn1(key);
+      const auto i1 = h1%buckets.size();
 
-         const Bucket* b1 = &buckets[i1];
-         for (size_t i = 0; i < BucketSize; i++) {
-            if (b1->slots[i].key == key) {
-               Payload payload = b1->slots[i].payload;
-               return 1;
-            }
+      const Bucket* b1 = &buckets[i1];
+      for (size_t i = 0; i < BucketSize; i++) {
+         if (b1->slots[i].key == key) {
+            Payload payload = b1->slots[i].payload;
+            //int nread = pread(storageFile, value.data(), sizeof(value), pos * blockSize);
+            return 1;
          }
-
-         auto i2 = (hashfn2(408957)^hashfn1(key))%buckets.size();
-         if (i2 == i1) {
-            i2 = (i1 == buckets.size() - 1) ? 0 : i1 + 1;
-         }
-
-         const Bucket* b2 = &buckets[i2];
-         for (size_t i = 0; i < BucketSize; i++) {
-            if (b2->slots[i].key == key) {
-               Payload payload = b2->slots[i].payload;
-               return 1;
-            }
-         }
-         return 0;
       }
+
+      auto i2 = (hashfn2(408957)^hashfn1(key))%buckets.size();
+      if (i2 == i1) {
+         i2 = (i1 == buckets.size() - 1) ? 0 : i1 + 1;
+      }
+
+      const Bucket* b2 = &buckets[i2];
+      for (size_t i = 0; i < BucketSize; i++) {
+         if (b2->slots[i].key == key) {
+            Payload payload = b2->slots[i].payload;
+            return 1;
+         }
+      }
+      return 0;
+   }
+
+   int lookupFile(const Key& key, std::vector<char>& value) const {
+      const auto h1 = hashfn1(key);
+      const auto i1 = h1%buckets.size();
+
+      const Bucket* b1 = &buckets[i1];
+      for (size_t i = 0; i < BucketSize; i++) {
+         if (b1->slots[i].key == key) {
+            Payload pos = b1->slots[i].payload;
+            int nread = pread(storageFile, value.data(), sizeof(value), pos * blockSize);
+            return nread;
+         }
+      }
+
+      auto i2 = (hashfn2(408957)^hashfn1(key))%buckets.size();
+      if (i2 == i1) {
+         i2 = (i1 == buckets.size() - 1) ? 0 : i1 + 1;
+      }
+
+      const Bucket* b2 = &buckets[i2];
+      for (size_t i = 0; i < BucketSize; i++) {
+         if (b2->slots[i].key == key) {
+            Payload pos = b2->slots[i].payload;
+            int nread = pread(storageFile, value.data(), sizeof(value), pos * blockSize);
+            return nread;
+         }
+      }
+      return 0;
+   }
 
    int useless_func() {
     return 0;
@@ -259,117 +327,127 @@ namespace kapilhashtable {
 
 
    std::map<std::string, std::string> lookup_statistics(const std::vector<Key>& dataset) const {
-         size_t primary_key_cnt = 0;
+      size_t primary_key_cnt = 0;
 
-         for (const auto& key : dataset) {
-            const auto h1 = hashfn1(key);
-            const auto i1 = h1%buckets.size();
-
-            const Bucket* b1 = &buckets[i1];
-            for (size_t i = 0; i < BucketSize; i++)
-               if (b1->slots[i].key == key)
-                  primary_key_cnt++;
-         }
-
-         return {
-            {"primary_key_ratio",
-             std::to_string(static_cast<long double>(primary_key_cnt) / static_cast<long double>(dataset.size()))},
-         };
-      }
-
-      void insert(const Key& key, const Payload& value) {
-         insert(key, value, 0);
-      }
-
-      static constexpr forceinline size_t bucket_byte_size() {
-         return sizeof(Bucket);
-      }
-
-      static forceinline std::string name() {
-         return "cuckoo_" + std::to_string(BucketSize) + "_" + KickingFn::name();
-      }
-
-      static forceinline std::string hash_name() {
-         return HashFn1::name() + "-" + HashFn2::name();
-      }
-
-      // static forceinline std::string reducer_name() {
-      //    return ReductionFn1::name() + "-" + ReductionFn2::name();
-      // }
-
-      static constexpr forceinline size_t bucket_size() {
-         return BucketSize;
-      }
-
-
-      size_t directory_byte_size() const {
-         size_t directory_bytesize = sizeof(decltype(buckets));
-         for (const auto& bucket : buckets) directory_bytesize +=sizeof(Bucket);
-         return directory_bytesize;
-      }
-
-      //kapil_change: assuming model size to be zero  
-      size_t model_byte_size() const { return 0; }
-
-      size_t byte_size() const { return model_byte_size() + directory_byte_size(); }
-
-      // static constexpr forceinline size_t directory_address_count(const size_t& buckets.size()) {
-      //    return (buckets.size() + BucketSize - 1) / BucketSize;
-      // }
-
-      void clear() {
-         for (auto& bucket : buckets)
-            for (auto& slot : bucket.slots)
-               slot.key = Sentinel;
-      }
-
-     private:
-      void insert(Key key, Payload payload, size_t kick_count) {
-      start:
-         // TODO: track max kick_count for result graphs
-         if (kick_count > MaxKickCycleLength) {
-            throw std::runtime_error("maximum kick cycle length (" + std::to_string(MaxKickCycleLength) + ") reached");
-         }
-
+      for (const auto& key : dataset) {
          const auto h1 = hashfn1(key);
          const auto i1 = h1%buckets.size();
-         auto i2 = (hashfn2(408957)^hashfn1(key))%buckets.size();
 
-         // std::cout<<key<<" h1: "<<i1<<" h2: "<<i2<<" kick_count "<<kick_count<<" capacity: "<<buckets.size()<<std::endl;
+         const Bucket* b1 = &buckets[i1];
+         for (size_t i = 0; i < BucketSize; i++)
+            if (b1->slots[i].key == key)
+               primary_key_cnt++;
+      }
 
-         if (unlikely(i2 == i1)) {
-            i2 = (i1 == buckets.size() - 1) ? 0 : i1 + 1;
+      return {
+         {"primary_key_ratio",
+            std::to_string(static_cast<long double>(primary_key_cnt) / static_cast<long double>(dataset.size()))},
+      };
+   }
+
+   void insert(const Key& key, const Payload& value) {
+      std::vector<char> buffer(sizeof(Payload), '\0');
+      std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
+      std::lock_guard g(locks[(numLock ++) % 8192]);
+      pwrite(storageFile, buffer.data(), sizeof(buffer), value * blockSize);
+      
+      insert(key, value, 0);
+   }
+
+   static constexpr forceinline size_t bucket_byte_size() {
+      return sizeof(Bucket);
+   }
+
+   static forceinline std::string name() {
+      return "cuckoo_" + std::to_string(BucketSize) + "_" + KickingFn::name();
+   }
+
+   static forceinline std::string hash_name() {
+      return HashFn1::name() + "-" + HashFn2::name();
+   }
+
+   // static forceinline std::string reducer_name() {
+   //    return ReductionFn1::name() + "-" + ReductionFn2::name();
+   // }
+
+   static constexpr forceinline size_t bucket_size() {
+      return BucketSize;
+   }
+
+
+   size_t directory_byte_size() const {
+      size_t directory_bytesize = sizeof(decltype(buckets));
+      for (const auto& bucket : buckets) directory_bytesize +=sizeof(Bucket);
+      return directory_bytesize;
+   }
+
+   //kapil_change: assuming model size to be zero  
+   size_t model_byte_size() const { return 0; }
+
+   size_t byte_size() const { return model_byte_size() + directory_byte_size(); }
+
+   // static constexpr forceinline size_t directory_address_count(const size_t& buckets.size()) {
+   //    return (buckets.size() + BucketSize - 1) / BucketSize;
+   // }
+
+   void clear() {
+      for (auto& bucket : buckets)
+         for (auto& slot : bucket.slots)
+            slot.key = Sentinel;
+   }
+
+   private:
+   void insert(Key key, Payload payload, size_t kick_count) {
+     start:
+      // TODO: track max kick_count for result graphs
+      if (kick_count > MaxKickCycleLength) {
+         throw std::runtime_error("maximum kick cycle length (" + std::to_string(MaxKickCycleLength) + ") reached");
+      }
+
+      const auto h1 = hashfn1(key);
+      const auto i1 = h1%buckets.size();
+      auto i2 = (hashfn2(408957)^hashfn1(key))%buckets.size();
+
+      // std::cout<<key<<" h1: "<<i1<<" h2: "<<i2<<" kick_count "<<kick_count<<" capacity: "<<buckets.size()<<std::endl;
+
+      if (unlikely(i2 == i1)) {
+         i2 = (i1 == buckets.size() - 1) ? 0 : i1 + 1;
+      }
+
+      Bucket* b1 = &buckets[i1];
+      Bucket* b2 = &buckets[i2];
+
+      // Update old value if the key is already in the table
+      for (size_t i = 0; i < BucketSize; i++) {
+         if (b1->slots[i].key == key) {
+            b1->slots[i].payload = payload;
+            //update
+            return;
          }
-
-         Bucket* b1 = &buckets[i1];
-         Bucket* b2 = &buckets[i2];
-
-         // Update old value if the key is already in the table
-         for (size_t i = 0; i < BucketSize; i++) {
-            if (b1->slots[i].key == key) {
-               b1->slots[i].payload = payload;
-               return;
-            }
-            if (b2->slots[i].key == key) {
-               b2->slots[i].payload = payload;
-               return;
-            }
-         }
-
-         // Way to go Mr. Stroustrup
-         if (const auto kicked =
-                kickingfn.template operator()<Bucket, Key, Payload, BucketSize, Sentinel>(b1, b2, key, payload)) {
-            key = kicked.value().first;
-            payload = kicked.value().second;
-            kick_count++;
-            goto start;
+         if (b2->slots[i].key == key) {
+            b2->slots[i].payload = payload;
+            return;
          }
       }
-   };
+
+      // Way to go Mr. Stroustrup
+      if (const auto kicked =
+               kickingfn.template operator()<Bucket, Key, Payload, BucketSize, Sentinel>(b1, b2, key, payload)) {
+         if (kicked == std::nullopt) {
+            return;
+         }
+         key = kicked.value().first;
+         payload = kicked.value().second;
+         kick_count++;
+         goto start;
+      }
+   }
+
+};
 
    //   template<class Payload, class HashFn1, class HashFn2, class ReductionFn1, class ReductionFn2, class KickingFn,
    //            uint32_t Sentinel>
-   //   class KapilCuckooHashTable<uint32_t, Payload, 8, HashFn1, HashFn2, ReductionFn1, ReductionFn2, KickingFn, Sentinel> {
+   //   class KapilCuckooHashTableFile<uint32_t, Payload, 8, HashFn1, HashFn2, ReductionFn1, ReductionFn2, KickingFn, Sentinel> {
    //     public:
    //      typedef uint32_t KeyType;
    //      typedef Payload PayloadType;
@@ -395,7 +473,7 @@ namespace kapilhashtable {
    //      std::mt19937 rand_; // RNG for moving items around
    //
    //     public:
-   //   KapilCuckooHashTable(const size_t& buckets.size())
+   //   KapilCuckooHashTableFile(const size_t& buckets.size())
    //      : MaxKickCycleLength(4096), hashfn1(HashFn1()), hashfn2(HashFn2()),
    //        reductionfn1(ReductionFn1(directory_address_count(buckets.size()))),
    //        reductionfn2(ReductionFn2(directory_address_count(buckets.size()))), kickingfn(KickingFn()),
@@ -409,7 +487,7 @@ namespace kapilhashtable {
    //      clear();
    //   }
    //
-   //      ~KapilCuckooHashTable() {
+   //      ~KapilCuckooHashTableFile() {
    //         free(buckets_);
    //      }
    //

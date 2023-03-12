@@ -53,7 +53,6 @@ class KapilLinearModelHashTable {
         }
       }
 
-
       return false;
 
 
@@ -75,7 +74,7 @@ class KapilLinearModelHashTable {
   std::vector<Bucket> buckets;
   bool disablelogging  = true;
   /// model for predicting the correct index
-//   Model model;
+  //   Model model;
 
   /// allocator for buckets
   std::unique_ptr<support::Tape<Bucket>> tape;
@@ -162,27 +161,26 @@ class KapilLinearModelHashTable {
     // efficient iterators in the first place.
     // for (const auto& d : data) insert(d.first, d.second);
 
-    std::random_shuffle(data.begin(), data.end());
-    uint64_t insert_count=1000000;
+    //std::random_shuffle(data.begin(), data.end());
+    //uint64_t insert_count=1000000;
 
-    for(uint64_t i=0;i<data.size()-insert_count;i++)
-    {
-      insert(data[i].first,data[i].second);
-    }
+    //for(uint64_t i=0;i<data.size()-insert_count;i++) {
+    //  insert(data[i].first,data[i].second);
+    //}
 
  
    
     auto start = std::chrono::high_resolution_clock::now(); 
 
-    for(uint64_t i=data.size()-insert_count;i<data.size();i++)
+    for(uint64_t i=0;i<data.size();i++)
     {
-      insert(data[i].first,data[i].second);
+      insert(data[i].first,i);
     }
 
      auto stop = std::chrono::high_resolution_clock::now(); 
     // auto duration = std::chrono::duration_cast<milliseconds>(stop - start); 
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
-    std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/insert_count << " nanoseconds" << std::endl;
+    std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/data.size() << " nanoseconds" << std::endl;
 
 
 
@@ -440,33 +438,23 @@ class KapilLinearModelHashTable {
       // this nested loop construction anyways.
       //  std::cout<<"probe rate: "<<directory_ind+1-start<<std::endl;
        
-      for (size_t i = 0; i < BucketSize; i++)
-       {
+      for (size_t i = 0; i < BucketSize; i++) {
           const auto& current_key = bucket->keys[i];
           // std::cout<<current_key<<" match "<<key<<std::endl;
           if (current_key == Sentinel) {
             return 0;
-            // return end();
             }
           if (current_key == key) {
-            // return {0,0,nullptr,*this};
-            return 1;
-            // return {directory_ind, i, bucket, *this};
-            }
-        }
-      
-
+            Payload pos = bucket->payloads[i];
+            return pos;
+          }
+      }
       // exit=false;
-
-      directory_ind++;
-
-        // prefetch_next(bucket);
-      
+      directory_ind ++;
+  
     }
 
-   return 0;
-
-    // return end();
+    return 0;
   }
 
   std::string name() {

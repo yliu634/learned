@@ -1,5 +1,7 @@
 #pragma once
 
+#define _GNU_SOURCE
+
 #include <fcntl.h>
 #include <unistd.h>
 #include <random>
@@ -17,7 +19,6 @@ public:
   size_t blockSize;
   recursive_mutex locks[8192];
   uint32_t disktime = 0;
-  // char* data = new char[size];
 
   explicit Storage(string fileName, uint32_t size, size_t blockSize = 4096, uint16_t port = 0) :
       size(size), blockSize(blockSize), fileName(fileName) {
@@ -44,7 +45,7 @@ public:
     //std::uintmax_t fileSize = boost::filesystem::file_size(filePath);
     //std::cout << "After writing file size: " << fileSize << " bytes" << std::endl;
 
-    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT, 0666);
+    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT | O_SYNC | O_DIRECT, 0666);
     ftruncate(storageFile, size * blockSize);
     
     numLock = 0;
@@ -64,20 +65,22 @@ public:
   int stocInsert(uint64_t pos, vector<char> & value) {
     std::lock_guard g(locks[(numLock ++) % 8192]);
     pwrite(storageFile, value.data(), blockSize, pos * blockSize);
-    return 1;
+    return pos;
   }
   
   int stocUpdate(uint64_t pos, vector<char> & value) {
     stocInsert(pos, value);
-    return 1;
+    return pos;
   }
 
   int stocRead(uint64_t pos, vector<char> &value) {
     // vector<char> buff(blockSize);
-    std::lock_guard g(locks[(numLock ++) % 8192]);
-    //disktime ++;
-    int nread = pread(storageFile, value.data(), blockSize, pos * blockSize);
-    //std::cout << "ludo read disk: " << disktime << std::endl;
+    // std::lock_guard g(locks[(numLock ++) % 8192]);
+    // disktime ++;
+    void *buf;
+    posix_memalign(&buf, 512, 512);
+    int nread = pread(storageFile, buf, blockSize, pos * blockSize);
+    // std::cout << "ludo read disk: " << disktime << std::endl;
     return nread;
   }
 
