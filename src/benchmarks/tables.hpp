@@ -461,7 +461,7 @@ static void PointProbeFile2(benchmark::State& state) {
       dataset::name(probing_dist);
 
   uint32_t blockSize(512);
-  std::string filepath = "../datasets/oneFile.txt";
+  std::string filepath = "/mnt/datasets/oneFile.txt";
   filestore::Storage stoc(filepath, dataset_size, blockSize); //filename & ds_size, blocksize could be ignored.
 
   if(previous_signature!=signature) 
@@ -517,15 +517,11 @@ static void PointProbeFile2(benchmark::State& state) {
     uint64_t total_sum=0;
     uint64_t query_count=100000;
 
-    
-
   }
   
-
   assert(prev_table != nullptr);
   Table* table = (Table*)prev_table;
   previous_signature = signature;  
-
 
   size_t i = 0;
   Payload pos = 0;
@@ -929,12 +925,12 @@ static void PointLookupLudo(benchmark::State& state) {
       std::string(typeid(Table).name()) + "_" + std::to_string(RangeSize) +
       "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
       dataset::name(probing_dist);
+  std::vector<std::pair<Key, Payload>> data{};
   if (previous_signature != signature) {
     std::cout << "performing setup... ... ..";
     auto start = std::chrono::steady_clock::now();
 
     // Generate data (keys & payloads) & probing set
-    std::vector<std::pair<Key, Payload>> data{};
     data.reserve(dataset_size);
     {
       auto keys = dataset::load_cached<Key>(did, dataset_size);
@@ -992,14 +988,20 @@ static void PointLookupLudo(benchmark::State& state) {
   
   size_t i = 0;
   Payload v = 0;
+  masters_thesis::LudoTable<Key, Payload> cp(data);
+  masters_thesis::DataPlaneLudo<Key, Payload> dp(cp);
   for (auto _ : state) {
     while (unlikely(i >= probing_set.size())) i -= probing_set.size();
-    const auto searched = probing_set[i++];
+    const Key searched = probing_set[i++];
+    
+    //auto start = std::chrono::high_resolution_clock::now(); 
+    bool it = dp.lookUp(searched, v); 
+    //auto stop = std::chrono::high_resolution_clock::now(); 
+    //auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+    //std::cout<< std::endl << "Insert Latency is: "<< duration.count() << " nanoseconds" << std::endl;
 
-    // Lower bound lookup
-    auto it = table->lookUp(searched, v);  
-
-    benchmark::DoNotOptimize(it);
+    //benchmark::DoNotOptimize(it);
+    
     // __sync_synchronize();
     // full_mem_barrier;
   }
@@ -1016,6 +1018,12 @@ static void PointLookupLudo(benchmark::State& state) {
   state.SetLabel(table->name() + ":" + dataset::name(did) + ":" +
                  dataset::name(probing_dist)+":"+temp);
 }
+
+
+
+
+
+
 
 template <class Table, size_t RangeSize>
 static void PointLookupLudoFile(benchmark::State& state) {
@@ -1042,15 +1050,16 @@ static void PointLookupLudoFile(benchmark::State& state) {
       dataset::name(probing_dist);
 
   uint32_t blockSize(512);
-  std::string filepath = "../datasets/oneFile.txt";
+  std::string filepath = "/mnt/datasets/oneFile.txt";
   filestore::Storage stoc(filepath, dataset_size, blockSize); //filename & ds_size, blocksize could be ignored.
 
+  std::vector<std::pair<Key, Payload>> data{};
   if (previous_signature != signature) {
     std::cout << "performing setup... ... ..";
     auto start = std::chrono::steady_clock::now();
 
     // Generate data (keys & payloads) & probing set
-    std::vector<std::pair<Key, Payload>> data{};
+    
     data.reserve(dataset_size);
     {
       auto keys = dataset::load_cached<Key>(did, dataset_size);
@@ -1099,12 +1108,16 @@ static void PointLookupLudoFile(benchmark::State& state) {
   size_t i = 0;
   Payload pos = 0;
   vector<char> value(blockSize);
+  
+  masters_thesis::LudoTable<Key, Payload> cp(data);
+  masters_thesis::DataPlaneLudo<Key, Payload> dp(cp);
+  //dp = new masters_thesis::DataPlaneLudo<Key, Payload>(cp);
   for (auto _ : state) {
     while (unlikely(i >= probing_set.size())) i -= probing_set.size();
     const auto searched = probing_set[i++];
 
     // point lookup
-    auto it = table->lookUp(searched, pos);  
+    auto it = dp.lookUp(searched, pos);  
     stoc.stocRead(pos, value);
 
     benchmark::DoNotOptimize(it);

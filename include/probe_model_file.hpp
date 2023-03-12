@@ -66,26 +66,12 @@ class KapilLinearModelHashTableFile {
           b.keys[i] = key;
           b.payloads[i] = payload;
 
-          std::vector<char> buffer(sizeof(Payload), '\0');
-          std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
-          std::lock_guard g(locks[(numLock ++) % 8192]);
-          /*std::cout << "Real write in data is: ";
-          for (char& el: buffer) {
-            std::cout << el;
-          }
-          std::cout << std::endl;*/
-          pwrite(storageFile, buffer.data(), sizeof(buffer), payload * blockSize);
           return true;
         }
 
         if (b.keys[i] == key) {
           b.keys[i] = key;
           b.payloads[i] = payload;
-
-          std::vector<char> buffer(sizeof(Payload), '\0');
-          std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
-          std::lock_guard g(locks[(numLock ++) % 8192]);
-          pwrite(storageFile, buffer.data(), sizeof(buffer), payload * blockSize);
           return true;
         }
       }
@@ -132,7 +118,7 @@ class KapilLinearModelHashTableFile {
  public:
   int storageFile = -1;
   uint32_t size;
-  std::string fileName = "....//datasets/oneFile.txt";
+  std::string fileName = "/mnt/datasets/oneFile.txt";
   std::recursive_mutex locks[8192];
   int numLock = 0;
 
@@ -145,7 +131,7 @@ class KapilLinearModelHashTableFile {
    * together with their corresponding payloads
    */
   KapilLinearModelHashTableFile(std::vector<std::pair<Key, Payload>> data,
-                                std::string fileName = "../datasets/oneFile.txt")
+                                std::string fileName = "/mnt/datasets/oneFile.txt")
       :tape(std::make_unique<support::Tape<Bucket>>()) {
 
     size = data.size();
@@ -167,9 +153,9 @@ class KapilLinearModelHashTableFile {
     }
     ofs.close();*/
 
-    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT | O_SYNC | O_DIRECT, 0666);
-    ftruncate(storageFile, size * blockSize);
-    numLock = 0;
+    //storageFile = open(fileName.c_str(), O_RDWR | O_CREAT | O_SYNC | O_DIRECT, 0666);
+    //ftruncate(storageFile, size * blockSize);
+    //numLock = 0;
 
 
 
@@ -227,9 +213,9 @@ class KapilLinearModelHashTableFile {
 
   }
 
-  ~KapilLinearModelHashTableFile(){
-    close(storageFile);
-  }
+  //~KapilLinearModelHashTableFile(){
+  //  close(storageFile);
+  //}
 
    int useless_func()
   {
@@ -479,7 +465,6 @@ class KapilLinearModelHashTableFile {
   int lookUp(const Key& key, Payload &value) {
     
     size_t directory_ind = model(key)%(buckets.size());
-
     auto start=directory_ind;
 
     for(;directory_ind<start+50000;)
@@ -499,18 +484,7 @@ class KapilLinearModelHashTableFile {
           }
           if (current_key == key) {
             value = bucket->payloads[i];
-            //std::lock_guard g(locks[(numLock ++) % 8192]);
-            
-            //void * buf;
-            //posix_memalign(&buf, 512, 512);
-            //int nread = pread(storageFile, buf, blockSize, pos * blockSize);
-            
-            //std::cout << nread << std::endl;
-            // std::cout << "This offset would be pos times bz: " << pos <<" x " << blockSize << std::endl;
-            // disktime ++;
-            // std::cout << "read bytes " << nread << " from pread(): " << std::endl;
-            // std::cout << "read disk: " << disktime << std::endl;
-            return value;
+            return 1;
           }
         }
       directory_ind++; 

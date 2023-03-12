@@ -20,6 +20,9 @@
 #include "ludo/othello_cp_dp.h"
 #include "ludo/cuckoo_ht.h"
 
+#include "include/convenience/builtins.hpp"
+#include "include/support.hpp"
+
 // Class for efficiently storing key->value mappings when the size is
 // known in advance and the keys are pre-hashed into uint64s.
 // Keys should have "good enough" randomness (be spread across the
@@ -41,6 +44,10 @@
 // http://www.cs.cmu.edu/~dga/papers/cuckoo-eurosys14.pdf )
 
 namespace masters_thesis {
+
+
+template<class K, class V, uint VL>
+class DataPlaneLudo;
 
 template<class K>
 struct Ludo_PathEntry {  // waste space in this prototype. can be more efficient in memory
@@ -121,6 +128,7 @@ public:
     h.setSeed(rand() | (uint64_t(rand()) << 32));
     digestH.setSeed(rand() | (uint64_t(rand()) << 32));
   }
+  
 };
 
 
@@ -173,25 +181,28 @@ public:
   }
   
   // The key type is fixed as a pre-hashed key for this specialized use.
-  LudoTable(const vector<pair<K, V>> &kv = vector<pair<K, V>>(),
+  LudoTable(const vector<pair<K, V>> &kv,
                    uint32_t capacity_ = 2048)
       : locator(1U, true), nKeys(0), capacity(capacity_) {
     
-    uint32_t toInsert = min((uint32_t) min(kv.size(), kv.size()), capacity);
+    uint32_t toInsert = (uint32_t) kv.size();
     
     num_buckets_ = 64U;
     
-    for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; capacity < capacity_; capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
+    for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; 
+              capacity < capacity_; 
+              capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
       num_buckets_ <<= 1U;
     
-    buckets_.resize(num_buckets_, empty_bucket);
-    locator.resizeCapacity(toInsert);
-    // till this line, an empty ludo is ready
-    if (toInsert) { // the oldMap should be initialized
-      for (int i = 0; i < toInsert; ++i) {
-        insert(kv[i].first, kv[i].second, false);
+      buckets_.resize(num_buckets_, empty_bucket);
+      locator.resizeCapacity(toInsert);
+      // till this line, an empty ludo is ready
+      if (toInsert) { // the oldMap should be initialized
+        for (int i = 0; i < toInsert; ++i) {
+          insert(kv[i].first, kv[i].second, false);
+        }
       }
-    }
+      
   }
   
   // The key type is fixed as a pre-hashed key for this specialized use.
@@ -351,7 +362,7 @@ public:
   // returns null if the table is full and the k-v is inserted to the fallback table; returns &k if inserted successfully.
   // if online, the updates are to be sent to the dp. so collect the path, and do not allow blocking rebuild in both Othello and Ludo
   // else (offline), we want all the updates to be directly reflected, even when it incur further and recursive retries.
-  UpdateResult insert(const K &k, V v, bool online = false) {
+  UpdateResult insert(const K &k, V v, bool online = true) {
     checkIntegrity();
 
     //    v = v & ValueMask;
@@ -487,7 +498,9 @@ public:
     
     for (uint32_t &b : buckets) {
       const Bucket &bucket = buckets_[b];
-      if (FindInBucket(k, bucket, out)) return true;
+      if (FindInBucket(k, bucket, out)) {
+        return true;
+      }
     }
     
     return false;
@@ -980,8 +993,6 @@ public:
   }
 
 
-
-
   // CuckooPathQueue is a trivial circular queue for path entries.
   // The caller is responsible for not inserting more than kMaxQueueSize
   // entries.  Each PresizedHeadlessCuckoo has one (heap-allocated) CuckooPathQueue
@@ -1025,6 +1036,235 @@ public:
   CuckooPathQueue cpq_;
   CuckooPathEntry visited_[kVisitedListSize];
   bool integrity = true;
+};
+
+template<class K, class V, uint VL = sizeof(V) * 8>
+class DataPlaneLudo : public LudoCommon<K, V, VL> {
+public:
+  using LudoCommon<K, V, VL>::kSlotsPerBucket;
+  using LudoCommon<K, V, VL>::kLoadFactor;
+  using LudoCommon<K, V, VL>::kMaxBFSPathLen;
+  
+  using LudoCommon<K, V, VL>::VDMask;
+  using LudoCommon<K, V, VL>::ValueMask;
+  
+  using LudoCommon<K, V, VL>::fast_map_to_buckets;
+  using LudoCommon<K, V, VL>::multiply_high_u32;
+  
+  using LudoCommon<K, V, VL>::LocatorSeedLength;
+  using LudoCommon<K, V, VL>::num_buckets_;
+  using LudoCommon<K, V, VL>::h;
+  using LudoCommon<K, V, VL>::digestH;
+  
+  typedef Ludo_PathEntry<K> PathEntry;
+  
+  struct Bucket {  // only as parameters and return values for easy access. the storage is compact.
+    uint8_t seed;
+    V values[kSlotsPerBucket];
+    
+    bool operator==(const Bucket &other) const {
+      if (seed != other.seed) return false;
+      for (char s = 0; s < kSlotsPerBucket; s++) {
+        if (values[s] != other.values[s]) return false;
+      }
+      return true;
+    }
+    
+    bool operator!=(const Bucket &other) const {
+      return !(*this == other);
+    }
+  };
+//  static const uint8_t bucketLength = sizeof(Bucket);
+  
+  vector<Bucket> buckets;
+  DataPlaneOthello<K, uint8_t, 1> locator;
+  vector<uint8_t> lock = vector<uint8_t>(8192, 0);
+  
+  virtual void setSeed(uint32_t s) {
+    LudoCommon<K, V, VL>::setSeed(s);
+    
+    locator.hab.setSeed(rand() | (uint64_t(rand()) << 32));
+    locator.hd.setSeed(rand());
+  }
+  
+  DataPlaneLudo() {}
+  
+  explicit DataPlaneLudo(const LudoTable<K, V, VL> &cp) : locator(cp.locator) {
+    h = cp.h;
+    digestH = cp.digestH;
+    num_buckets_ = cp.num_buckets_;
+    resetMemory();
+    
+    for (uint32_t bktIdx = 0; bktIdx < num_buckets_; ++bktIdx) {
+      const typename LudoTable<K, V, VL>::Bucket &cpBucket = cp.buckets_[bktIdx];
+      Bucket &dpBucket = buckets[bktIdx];
+      dpBucket.seed = cpBucket.seed;
+      memset(dpBucket.values, 0, kSlotsPerBucket * sizeof(V));
+      
+      const FastHasher64<K> locateHash(cpBucket.seed);
+      
+      for (char slot = 0; slot < kSlotsPerBucket; ++slot) {
+        if (cpBucket.occupiedMask & (1U << slot)) {
+          const K &k = cpBucket.keys[slot];
+          dpBucket.values[locateHash(k) >> 62] = cpBucket.values[slot];
+        }
+      }
+    }
+  }
+  
+  template<class V2>
+  DataPlaneLudo(const LudoTable<K, V2, VL> &cp, unordered_map<V2, V> m): locator(cp.locator) {
+    h = cp.h;
+    digestH = cp.digestH;
+    num_buckets_ = cp.num_buckets_;
+    
+    resetMemory();
+    
+    for (uint32_t bktIdx = 0; bktIdx < num_buckets_; ++bktIdx) {
+      const typename LudoTable<K, V2, VL>::Bucket &cpBucket = cp.buckets_[bktIdx];
+      Bucket &dpBucket = buckets[bktIdx];
+      dpBucket.seed = cpBucket.seed;
+      memset(dpBucket.values, 0, kSlotsPerBucket * sizeof(V));
+      
+      const FastHasher64<K> locateHash(cpBucket.seed);
+      
+      for (char slot = 0; slot < kSlotsPerBucket; ++slot) {
+        if (cpBucket.occupiedMask & (1U << slot)) {
+          const K &k = cpBucket.keys[slot];
+          dpBucket.values[locateHash(k) >> 62] = m[cpBucket.values[slot]];
+        }
+      }
+    }
+  }
+  
+  // will clear all entries. because it is only used at initialization
+  void resizeCapacity(uint32_t targetCapacity) {
+    targetCapacity = max(targetCapacity, 256U);
+    
+    uint64_t nextNbuckets = 64U;
+    uint64_t nextCapacity = nextNbuckets * kLoadFactor * kSlotsPerBucket;
+    for (; nextCapacity < targetCapacity; nextCapacity = nextNbuckets * kLoadFactor * kSlotsPerBucket)
+      nextNbuckets <<= 1U;
+    
+    num_buckets_ = nextNbuckets;
+    resetMemory();
+    
+    locator.resizeCapacity(nextCapacity);
+  }
+  
+  inline void resetMemory() {
+    buckets.resize(num_buckets_);
+  }
+  
+  inline V lookUp(const K &k) const {
+    V out;
+    if (!lookUp(k, out)) throw runtime_error("key does not exist");
+    return out;
+  }
+  
+  // Returns true if found.  Sets *out = value.
+  inline bool lookUp(const K &k, V &out) const {
+    uint32_t bktId[2];
+
+    auto start = std::chrono::high_resolution_clock::now(); 
+    fast_map_to_buckets(h(k), bktId, num_buckets_);
+    auto stop = std::chrono::high_resolution_clock::now(); 
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+    std::cout << "fast map to hash: "<< duration.count() << " nanoseconds" << std::endl;
+
+
+    while (true) {
+      uint8_t va1 = lock[bktId[0] & 8191], vb1 = lock[bktId[1] & 8191];
+      COMPILER_BARRIER();
+      if (va1 % 2 == 1 || vb1 % 2 == 1) continue;
+      
+      const Bucket &bucket = buckets[bktId[locator.lookUp(k)]];
+      
+      COMPILER_BARRIER();
+      uint8_t va2 = lock[bktId[0] & 8191], vb2 = lock[bktId[1] & 8191];
+      
+      if (va1 != va2 || vb1 != vb2) continue;
+      
+      start = std::chrono::high_resolution_clock::now();
+      uint64_t i = FastHasher64<K>(bucket.seed)(k) >> 62;
+      stop = std::chrono::high_resolution_clock::now();
+      duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+      std::cout<< "fast haser 64: "<< duration.count() << " nanoseconds" << std::endl;
+
+
+      out = bucket.values[i];
+      
+      return true;
+    }
+  }
+  
+  inline void applyInsert(const vector<PathEntry> &path, V value) {
+    for (int i = 0; i < path.size(); ++i) {
+      PathEntry entry = path[i];
+      Bucket bucket = buckets[entry.bid];
+      bucket.seed = entry.newSeed;
+      
+      uint8_t toSlots[] = {entry.s0, entry.s1, entry.s2, entry.s3};
+      
+      V buffer[4];       // solve the permutation is slow. just copy the 4 elements
+      for (char s = 0; s < 4; ++s) {
+        buffer[s] = bucket.values[s];
+      }
+      
+      for (char s = 0; s < 4; ++s) {
+        bucket.values[toSlots[s]] = buffer[s];
+      }
+      
+      if (i + 1 == path.size()) {  // put the new value
+        bucket.values[entry.sid] = value;
+      } else {  // move key from another bucket and slot to this bucket and slot
+        PathEntry from = path[i + 1];
+        uint8_t tmp[4] = {from.s0, from.s1, from.s2, from.s3};
+        uint8_t sid;
+        for (uint8_t ii = 0; ii < 4; ++ii) {
+          if (tmp[ii] == from.sid) {
+            sid = ii;
+            break;
+          }
+        }
+        bucket.values[entry.sid] = buckets[from.bid].values[sid];
+      }
+      
+      lock[entry.bid & 8191]++;
+      COMPILER_BARRIER();
+      
+      if (entry.locatorCC.size()) {
+        locator.fixHalfTreeByConnectedComponent(entry.locatorCC, 1);
+      }
+      
+      buckets[entry.bid] = bucket;
+      
+      COMPILER_BARRIER();
+      lock[entry.bid & 8191]++;
+    }
+  }
+  
+  inline void applyUpdate(uint32_t bid, uint8_t sid, V val) {
+    lock[bid & 8191]++;
+    COMPILER_BARRIER();
+  
+    
+    buckets[bid].values[sid] = val;
+    
+    COMPILER_BARRIER();
+    lock[bid & 8191]++;
+  }
+  
+  inline void applyUpdate(uint32_t bs, V val) {
+    uint32_t bid = bs >> 2;
+    uint8_t sid = bs & 3;
+    
+    applyUpdate(bid, sid, val);
+  }
+  
+  inline uint64_t getMemoryCost() const {
+    return buckets.size() * sizeof(Bucket);
+  }
 };
 
 }
