@@ -133,18 +133,37 @@ public:
   FastHasher64()
     : Hasher64<K>(0xe2211e2211) {
   }
-  
   explicit FastHasher64(uint64_t _s)
     : Hasher64<K>(_s) {
   }
-  
+  inline void setSeed(uint64_t _s) {
+    this->s = _s;
+  }
   inline uint64_t operator()(const K &k0) const {
     void *base = this -> template getBase<K>(k0);
     const uint16_t keyByteLength = this -> template getKeyByteLength<K>(k0);
     uint32_t h[2];
     *(uint64_t*)h = this->s;
-    
     HashUtil::BobHash(base, keyByteLength, h, h+1);
     return *(uint64_t*)h;
+  }
+};
+
+
+template<class K>
+class FastHasher64I : public Hasher64<K> {
+public:
+  FastHasher64I()
+    : Hasher64<K>(0xe2211e2211) {
+  }
+  explicit FastHasher64I(uint64_t _s)
+    : Hasher64<K>(_s) {
+  }
+  inline void setSeed(uint64_t _s) {
+    this->s = _s;
+  }
+  inline uint64_t operator()(const K &k0) const {
+    void *base = this -> template getBase<K>(k0);
+    return HashUtil::MurmurHash(base, sizeof(K), this->s);
   }
 };

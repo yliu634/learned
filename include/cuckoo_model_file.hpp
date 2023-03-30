@@ -4,7 +4,9 @@
 // originally taken from the Stanford FutureData index baselines repo. Original copyright:
 // Copyright (c) 2017-present Peter Bailis, Kai Sheng Tai, Pratiksha Thaker, Matei Zaharia
 // MIT License
+#define _GNU_SOURCE
 #include <immintrin.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -18,113 +20,34 @@
 #include <vector>
 #include <learned_hashing.hpp>
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstdint>
+
+#include "cuckoo_model.hpp"
+#include "include/blob/json.hpp"
+#include "include/blob/filestore.hpp"
 #include "include/convenience/builtins.hpp"
 #include "include/support.hpp"
 
 namespace kapilmodelhashtable {
-   /**
-    * Place entry in bucket with more available space.
-    * If both are full, kick from either bucket with 50% chance
-    */
-   struct KapilModelBalancedKicking {
-     private:
-      std::mt19937 rand_;
 
-     public:
-      static std::string name() {
-         return "balanced_kicking";
-      }
-
-      template<class Bucket, class Key, class Payload, size_t BucketSize, Key Sentinel>
-      forceinline std::optional<std::pair<Key, Payload>> operator()(Bucket* b1, Bucket* b2, const Key& key,
-                                                                    const Payload& payload) {
-         size_t c1 = 0, c2 = 0;
-         for (size_t i = 0; i < BucketSize; i++) {
-            c1 += (b1->slots[i].key == Sentinel ? 0 : 1);
-            c2 += (b2->slots[i].key == Sentinel ? 0 : 1);
-         }
-
-         if (c1 <= c2 && c1 < BucketSize) {
-            b1->slots[c1] = {.key = key, .payload = payload};
-            return std::nullopt;
-         }
-
-         if (c2 < BucketSize) {
-            b2->slots[c2] = {.key = key, .payload = payload};
-            return std::nullopt;
-         }
-
-         const auto rng = rand_();
-         const auto victim_bucket = rng & 0x1 ? b1 : b2;
-         const size_t victim_index = rng % BucketSize;
-         Key victim_key = victim_bucket->slots[victim_index].key;
-         Payload victim_payload = victim_bucket->slots[victim_index].payload;
-         victim_bucket->slots[victim_index] = {.key = key, .payload = payload};
-         return std::make_optional(std::make_pair(victim_key, victim_payload));
-      };
-   };
-
-   /**
-    * if primary bucket has space, place entry in there
-    * else if secondary bucket has space, place entry in there
-    * else kick a random entry from the primary bucket with chance
-    *
-    * @tparam Bias chance that element is kicked from second bucket in percent (i.e., value of 10 -> 10%)
-    */
-   template<uint8_t Bias>
-   struct KapilModelBiasedKicking {
-     private:
-      std::mt19937 rand_;
-      double chance = static_cast<double>(Bias) / 100.0;
-      uint32_t threshold_ = static_cast<uint32_t>(static_cast<double>(std::numeric_limits<uint32_t>::max()) * chance);
-
-     public:
-      static std::string name() {
-         return "biased_kicking_" + std::to_string(Bias);
-      }
-
-      template<class Bucket, class Key, class Payload, size_t BucketSize, Key Sentinel>
-      forceinline std::optional<std::pair<Key, Payload>> operator()(Bucket* b1, Bucket* b2, const Key& key,
-                                                                    const Payload& payload) {
-         size_t c1 = 0, c2 = 0;
-         for (size_t i = 0; i < BucketSize; i++) {
-            c1 += (b1->slots[i].key == Sentinel ? 0 : 1);
-            c2 += (b2->slots[i].key == Sentinel ? 0 : 1);
-         }
-
-         if (c1 < BucketSize) {
-            b1->slots[c1] = {.key = key, .payload = payload};
-            return std::nullopt;
-         }
-
-         if (c2 < BucketSize) {
-            b2->slots[c2] = {.key = key, .payload = payload};
-            return std::nullopt;
-         }
-
-         const auto rng = rand_();
-         const auto victim_bucket = rng > threshold_ ? b1 : b2;
-         const size_t victim_index = rng % BucketSize;
-         Key victim_key = victim_bucket->slots[victim_index].key;
-         Payload victim_payload = victim_bucket->slots[victim_index].payload;
-         victim_bucket->slots[victim_index] = {.key = key, .payload = payload};
-         return std::make_optional(std::make_pair(victim_key, victim_payload));
-      };
-   };
-
-   /**
-    * if primary bucket has space, place entry in there
-    * else if secondary bucket has space, place entry in there
-    * else kick a random entry from the primary bucket and place entry in primary bucket
-    */
    using KapilModelUnbiasedKicking = KapilModelBiasedKicking<0>;
 
    template<class Key, class Payload, size_t BucketSize, size_t OverAlloc, class Model , class HashFn2, 
-    class KickingFn, Key Sentinel = std::numeric_limits<Key>::max()>
-   class KapilCuckooModelHashTable {
+    class KickingFn, Key Sentinel = std::numeric_limits<Key>::max(),
+          size_t blockSize = 512>
+    class KapilCuckooModelHashTableFile {
      public:
       using KeyType = Key;
       using PayloadType = Payload;
+      int numLock = 0;
+      uint32_t disktime = 0;
+      uint32_t lookupCall = 0;
+      std::vector<char> value;
+      std::recursive_mutex locks[8192];
+      std::string filepath = "../datasets/oneFile.txt";
+      filestore::Storage *stoc;
 
      private:
       const size_t MaxKickCycleLength;
@@ -146,14 +69,12 @@ namespace kapilmodelhashtable {
       std::mt19937 rand_; // RNG for moving items around
 
      public:
-      KapilCuckooModelHashTable(std::vector<std::pair<Key, Payload>> data)
+      KapilCuckooModelHashTableFile(std::vector<std::pair<Key, Payload>> data,
+                std::string fileName = "../datasets/oneFile.txt")
          : MaxKickCycleLength(50000) {
 
-      /*if (OverAlloc<10000) {
-         buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
-         } else {
-         buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
-      } */  
+      stoc = new filestore::Storage(fileName, data.size(), blockSize);
+      value.resize(blockSize, 'a');
       buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize);
 
       std::sort(data.begin(), data.end(),
@@ -167,8 +88,6 @@ namespace kapilmodelhashtable {
 
       // train model on sorted data
       model.train(keys.begin(), keys.end(), buckets.size());
-
-      // std::cout<<std::endl<<"Start Here "<<BucketSize<<" "<<OverAlloc<<" "<<model.name()<<" Model Cuckoo Balanced 0 "<<model.model_count()<<" 0"<<std::endl<<std::endl;
 
       auto start = std::chrono::high_resolution_clock::now(); 
       for(uint64_t i=0;i<data.size();i++) {
@@ -187,10 +106,12 @@ namespace kapilmodelhashtable {
          const Bucket* b1 = &buckets[i1];
          for (size_t i = 0; i < BucketSize; i++) {
             if (b1->slots[i].key == key) {
-               Payload payload = b1->slots[i].payload;
+               Payload current_pos = b1->slots[i].payload;
+               //stoc->stocRead(current_pos, value);
                return 1;
             }
          }
+         
          auto i2 = (hashfn2(key))%buckets.size();
          if (i2 == i1) {
             i2 = (i1 == buckets.size() - 1) ? 0 : i1 + 1;
@@ -198,7 +119,8 @@ namespace kapilmodelhashtable {
          const Bucket* b2 = &buckets[i2];
          for (size_t i = 0; i < BucketSize; i++) {
             if (b2->slots[i].key == key) {
-               Payload payload = b2->slots[i].payload;
+               Payload current_pos = b2->slots[i].payload;
+               //stoc->stocRead(current_pos, value);
                return 1;
             }
          }
@@ -209,7 +131,7 @@ namespace kapilmodelhashtable {
          return 0;
       }
 
-      void print_data_statistics() {
+      void print_data_statistics(bool output = false) {
          size_t primary_key_cnt = 0;
          size_t total_cnt=0;
 
@@ -219,18 +141,15 @@ namespace kapilmodelhashtable {
             for (size_t i = 0; i < BucketSize; i++) {
                if (b1->slots[i].key == Sentinel) {
                   break;
-                  // return std::make_optional(payload);
                }
                size_t directory_ind = model(b1->slots[i].key)%(buckets.size());
-               if(directory_ind==buck_ind)
-               {
+               if(directory_ind==buck_ind) {
                   primary_key_cnt++;
                }
                total_cnt++;
             }
-
          }  
-         std::cout<<" Primary Key Ratio: "<<primary_key_cnt*1.00/total_cnt<<std::endl;
+         std::cout<< "Primary Key Ratio: "<<primary_key_cnt*1.00/total_cnt<<std::endl;
          return ;
       }
 
@@ -253,8 +172,9 @@ namespace kapilmodelhashtable {
          };
       }
 
-      void insert(const Key& key, const Payload& value) {
-         insert(key, value, 0);
+      void insert(const Key& key, const Payload& pos) {
+         //stoc->stocInsert(pos, value);
+         insert(key, pos, 0);
       }
 
       static constexpr forceinline size_t bucket_byte_size() {

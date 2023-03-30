@@ -1,6 +1,6 @@
 #pragma once
-#define _GNU_SOURCE
 
+#define _GNU_SOURCE
 #include <immintrin.h>
 
 #include <algorithm>
@@ -15,10 +15,13 @@
 #include <cstdint>
 #include <cstring>
 #include <ctime>
+
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdint>
 
+#include "include/blob/json.hpp"
+#include "include/blob/filestore.hpp"
 #include "include/convenience/builtins.hpp"
 #include "include/support.hpp"
 
@@ -27,14 +30,18 @@ template <class Key, class Payload, size_t BucketSize, size_t OverAlloc,
           class Model = learned_hashing::MonotoneRMIHash<Key, 1000000>,
           bool ManualPrefetch = false,
           Key Sentinel = std::numeric_limits<Key>::max(),
-          size_t blockSize = 512>
+          uint32_t blockSize = 512>
 class KapilChainedModelHashTableFile {
     
   public:
     Model model;
+    int numLock = 0;
     uint32_t disktime = 0;
-    uint32_t lookupCall = 0; 
-    //   const HashFn hashfn;  
+    uint32_t lookupCall = 0;
+    std::vector<char> value;
+    std::recursive_mutex locks[8192];
+    std::string filepath = "../datasets/oneFile.txt";
+    filestore::Storage *stoc;
 
   std::vector<Key> key_vec;  
 
@@ -48,70 +55,55 @@ class KapilChainedModelHashTableFile {
       std::fill(keys.begin(), keys.end(), Sentinel);
     }
 
-    size_t byte_size() const {
-      return sizeof(Bucket) + (next != nullptr ? next->byte_size() : 0);
-    }
-  };
-
-  /// directory of buckets
-  std::vector<Bucket> buckets;
-
-  /// model for predicting the correct index
-//   Model model;
-
-  /// allocator for buckets
-  std::unique_ptr<support::Tape<Bucket>> tape;
-
-  void bucketInsert(Bucket& b, const Key& key, const Payload& payload,
+    void insert(const Key& key, const Payload& payload,
                 support::Tape<Bucket>& tape) {
-      Bucket* previous = &b;
+      Bucket* previous = this;
 
-      for (Bucket* current = &b; current != nullptr;
-        current = current->next) {
+      for (Bucket* current = previous; current != nullptr;
+           current = current->next) {
         for (size_t i = 0; i < BucketSize; i++) {
           if (current->keys[i] == Sentinel) {
             current->keys[i] = key;
             current->payloads[i] = payload;
-
-            std::vector<char> buffer(sizeof(Payload), '\0');
-            std::memcpy(buffer.data(), reinterpret_cast<const char*>(&key), sizeof(key));
-            std::lock_guard g(locks[(numLock ++) % 8192]);
-            pwrite(storageFile, buffer.data(), sizeof(buffer), payload * blockSize);
             return;
           }
         }
+
         previous = current;
       }
 
       // static var will be shared by all instances
       previous->next = tape.alloc();
-      bucketInsert(*(previous->next), key, payload, tape);
+      previous->next->insert(key, payload, tape);
     }
 
-  /**
-   * Inserts a given (key,payload) tuple into the hashtable.
+    size_t byte_size() const {
+      return sizeof(Bucket) + (next != nullptr ? next->byte_size() : 0);
+    }
+  };
+
+  // directory of buckets
+  std::vector<Bucket> buckets;
+
+  // allocator for buckets
+  std::unique_ptr<support::Tape<Bucket>> tape;
+
+  /* Inserts a given (key,payload) tuple into the hashtable.
    *
    * Note that this function has to be private for now since
    * model retraining will be necessary if this is used as a
    * construction interface.
    */
   forceinline void insert(const Key& key, const Payload& payload) {
-    // const auto index = model(key);
-     const auto index = model(key)/100000000.0;
-    // std::cout<<"key: "<<key<<" index: "<<index<<" scale factor: "<<std::endl;
+    
+    const auto index = model(key)%buckets.size();
+    //stoc->stocInsert(payload, value);
     assert(index >= 0);
     assert(index < buckets.size());
-    // buckets[index].insert(key, payload, *tape);
-    bucketInsert(buckets[index], key, payload, *tape);
+    buckets[index].insert(key, payload, *tape);
   }
 
  public:
-  int storageFile = -1;
-  uint32_t dataSize;
-  std::string fileName = "../datasets/oneFile.txt";
-  std::recursive_mutex locks[8192];
-  int numLock = 0;
-
   KapilChainedModelHashTableFile() = default;
 
   /**
@@ -119,31 +111,11 @@ class KapilChainedModelHashTableFile {
    * together with their corresponding payloads
    */
   KapilChainedModelHashTableFile(std::vector<std::pair<Key, Payload>> data,
-                        std::string fileName = "../datasets/oneFile.txt")
-      : tape(std::make_unique<support::Tape<Bucket>>()), fileName(fileName) {
+                                std::string fileName = "../datasets/oneFile.txt")
+      : tape(std::make_unique<support::Tape<Bucket>>()) {
 
-    dataSize = data.size();
-    size_t num_bytes = dataSize * blockSize;
-    std::ofstream ofs(fileName, std::ios::out|std::ios::binary);
-    if (!ofs) {
-      std::cerr << "Error: failed to open file \"" << fileName << "\"\n";
-      return;
-    }
-    std::vector<char> buffer(1024 * 1024, '\0'); // 1 MB buffer
-    while (num_bytes > 0) {
-        std::size_t bytes_to_write = std::min(buffer.size(), num_bytes);
-        ofs.write(buffer.data(), bytes_to_write);
-        num_bytes -= bytes_to_write;
-        if (!ofs) {
-          std::cerr << "Error: could not write to file '" << fileName << "'\n";
-          return;
-        }
-    }
-    ofs.close();
-
-    storageFile = open(fileName.c_str(), O_RDWR | O_CREAT, 0666);
-    ftruncate(storageFile, dataSize * blockSize);
-    numLock = 0;
+    stoc = new filestore::Storage(fileName, data.size(), blockSize);
+    value.resize(blockSize, 'a');
 
     if (OverAlloc<10000) {
       buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
@@ -167,15 +139,6 @@ class KapilChainedModelHashTableFile {
 
     std::string model_name=model.name();
 
-    // if (model_name.find("pgm_hash_eps") != std::string::npos)
-    // {
-    //   model = new Model(keys.begin(), keys.end(), buckets.size());
-    // }
-    // else
-    // {
-      // model.train(keys.begin(), keys.end(), buckets.size());
-    // }
-
     std::cout<<std::endl<<"Start Here "<<BucketSize<<" "<<OverAlloc<<" "<<model.name()<<" Model Chained Balanced 0 "<<model.model_count()<<" 0"<<std::endl<<std::endl;
 
     key_vec.resize(2*keys.size(),0);
@@ -192,29 +155,20 @@ class KapilChainedModelHashTableFile {
     // optimizations during lookup etc & enable implementing
     // efficient iterators in the first place.
     // for (const auto& d : data) insert(d.first, d.second);
-    //std::random_shuffle(data.begin(), data.end());
-    //uint64_t insert_count=1000000;
+    
+    // std::random_shuffle(data.begin(), data.end());
 
-    std::cout<<"Starting Inserts"<<std::endl;
-
+    std::cout<<"Start Inserts"<<std::endl;
     auto start = std::chrono::high_resolution_clock::now(); 
-
     for(uint64_t i=0;i<data.size();i++) {
       insert(data[i].first, i);
     }
+    auto stop = std::chrono::high_resolution_clock::now(); 
 
-     auto stop = std::chrono::high_resolution_clock::now(); 
-
-    std::cout<<"Enddd Inserts"<<std::endl;
-
-    // auto duration = std::chrono::duration_cast<milliseconds>(stop - start); 
+    std::cout<<"Ended Inserts"<<std::endl;
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
     std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/data.size() << " nanoseconds" << std::endl;
 
-  }
-
-  ~KapilChainedModelHashTableFile() {
-    close(storageFile);
   }
 
   class Iterator {
@@ -268,13 +222,6 @@ class KapilChainedModelHashTableFile {
 
       return *this;
     }
-
-    // // TODO(dominik): support postfix increment
-    // forceinline Iterator operator++(int) {
-    //   Iterator old = *this;
-    //   ++this;
-    //   return old;
-    // }
 
     forceinline bool operator==(const Iterator& other) const {
       return directory_ind == other.directory_ind &&
@@ -342,31 +289,22 @@ class KapilChainedModelHashTableFile {
 
     // std::cout<<"index: "<<index<<" curr val: "<<key_vec[index]<<std::endl;
 
-    if(key_vec[index]<low_key)
-    {
-      while(key_vec[index]<low_key)
-      {
+    if(key_vec[index]<low_key) {
+      while(key_vec[index]<low_key) {
         index+=2;
       }
-    }
-    else
-    {
-      while(key_vec[index-2]>low_key)
-      {
+    } else {
+      while(key_vec[index-2]>low_key) {
         index-=2;
       }
     }
 
     // std::cout<<"index adjusted: "<<index<<" "<<std::endl<<std::endl;
-
     // int scan_keys=0;
 
-    if(key_vec[index]==low_key)
-    {
+    if(key_vec[index]==low_key) {
       return 1;
-    }
-    else
-    {
+    } else {
       return 0;
     }
     
@@ -377,7 +315,8 @@ class KapilChainedModelHashTableFile {
 
   }
 
-  uint64_t hash_range_query(uint64_t low_key,uint64_t high_key) {
+  uint64_t hash_range_query(uint64_t low_key,uint64_t high_key)
+  {
     uint64_t ans=0;
     uint64_t directory_ind=model(low_key);
 
@@ -405,6 +344,18 @@ class KapilChainedModelHashTableFile {
                   break;
                 }
             }
+            // std::cout<<"bucket: "<<directory_ind<<" "<<bucket->keys[0]<<" low: "<<low_key<<" high: "<<high_key<<std::endl;
+            // const auto& current_key = bucket->keys[0];
+            // if (current_key >= low_key && current_key <= high_key) 
+            // {
+            //   ans+=bucket->payloads[0];
+            // }
+
+            // if(current_key>high_key && current_key!=Sentinel)
+            // {
+            //   exit_check=1;
+            //   break;
+            // }
 
             if(exit_check==1)
             {
@@ -429,26 +380,22 @@ class KapilChainedModelHashTableFile {
 
   }
 
+
+
   int useless_func() {
     return 0;
   }
 
-  void gap_stats()
-  {
+  void gap_stats() {
     std::vector<uint64_t> key_vec;
     std::vector<double> cdf_prediction,gap;
     std::map<int,uint64_t> count_gap;
 
-    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++)
-    {
+    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++) {
       auto bucket = &buckets[buck_ind%buckets.size()];
 
-     
-
-      while (bucket != nullptr)
-      {
-        for (size_t i = 0; i < BucketSize; i++)
-        {
+      while (bucket != nullptr) {
+        for (size_t i = 0; i < BucketSize; i++) {
           const auto& current_key = bucket->keys[i];
           if (current_key == Sentinel) break;
           key_vec.push_back(current_key);
@@ -456,7 +403,7 @@ class KapilChainedModelHashTableFile {
         }
         // bucket_count++;
         bucket = bucket->next;
-      //   prefetch_next(bucket);
+        //   prefetch_next(bucket);
       }
 
     }  
@@ -543,58 +490,50 @@ class KapilChainedModelHashTableFile {
   }
 
 
+  void print_data_statistics(bool output = false) {
+    std::vector<uint64_t> dist_from_ideal;
+    //std::vector<uint64_t> dist_to_empty;
 
-  
+    std::map<int,int> dist_from_ideal_map;
+    //std::map<int,int> dist_to_empty_map;
 
-  void print_data_statistics()
-  {
-    std::vector<uint64_t> num_ele;
-    std::map<int,int> num_ele_map;
-
-    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++)
-    {
+    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++) {
       auto bucket = &buckets[buck_ind%buckets.size()];
-
-      int ele_count=0;
-
-      while (bucket != nullptr) {
-        for (size_t i = 0; i < BucketSize; i++) {
-          const auto& current_key = bucket->keys[i];
-          if (current_key == Sentinel) break;
-          ele_count++;
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        if(current_key==Sentinel) {
+          break;
         }
-        // bucket_count++;
-        bucket = bucket->next;
-      //   prefetch_next(bucket);
+
+        size_t directory_ind = model(current_key)%(buckets.size());
+        // std::cout<<" pred val: "<<directory_ind<<" key val: "<<current_key<<" bucket val: "<<buck_ind<<std::endl;
+        dist_from_ideal.push_back(directory_ind-buck_ind);
       }
-
-      num_ele.push_back(ele_count);
-    }  
-
-    std::sort(num_ele.begin(),num_ele.end());
-
-    for(int i=0;i<num_ele.size();i++)
-    {
-      num_ele_map[num_ele[i]]=0;
     }
 
-    for(int i=0;i<num_ele.size();i++)
-    {
-      num_ele_map[num_ele[i]]+=1;
+    std::sort(dist_from_ideal.begin(),dist_from_ideal.end());
+
+    for(int i=0;i<dist_from_ideal.size();i++) {
+      dist_from_ideal_map[dist_from_ideal[i]]=0;
     }
 
-
-    std::map<int, int>::iterator it;
-
-    std::cout<<"Start Num Elements"<<std::endl;
-
-    for (it = num_ele_map.begin(); it != num_ele_map.end(); it++)
-    {
-      std::cout<<"Num Elements: ";
-      std::cout<<it->first<<" : "<<it->second<<std::endl;
+    for(int i=0;i<dist_from_ideal.size();i++) {
+      dist_from_ideal_map[dist_from_ideal[i]]+=1;
     }
 
-    return;
+    if (output) {
+      std::ofstream outFile("../results/ideal_pos_diff_chain_model.json");
+      if (outFile.is_open()) {
+        for (auto it = dist_from_ideal_map.begin(); it != dist_from_ideal_map.end(); ++it) {
+            outFile << it->first << "," << it->second << std::endl;
+        }
+        outFile.close();
+      } else {
+        std::cout << "Error opening file!" << std::endl;
+      }
+      outFile.close();
+    }
+
   }
 
 
@@ -606,8 +545,7 @@ class KapilChainedModelHashTableFile {
     return {buckets.size(), 0, nullptr, *this};
   }
 
-  forceinline int hash_val(const Key& key)
-  {
+  forceinline int hash_val(const Key& key) {
     return model(key);
   }
 
@@ -618,77 +556,81 @@ class KapilChainedModelHashTableFile {
    *
    * @param key the key to search
    */
-  forceinline int operator[](const Key& key) const {
+  forceinline int operator[](const Key& key) {
     // assert(key != Sentinel);
-
-
     // obtain directory bucket
-    const size_t directory_ind = model(key);
-    auto bucket = &buckets[directory_ind];
-
-
-    // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-    // this nested loop construction anyways.
-
-    // int bucket_count=1;
-    while (bucket != nullptr) {
-      // std::cout<<"exploring bucket"<<std::endl;
-      for (size_t i = 0; i < BucketSize; i++) {
-        const auto& current_key = bucket->keys[i];
-        if (current_key == Sentinel) break;
-        if (current_key == key) 
-        {
-          return 1;
-          // std::cout<<"bucket count: "<<bucket_count<<std::endl;
-          // return {directory_ind, i, bucket, *this};
+    size_t directory_ind = model(key)%buckets.size();
+    int exit_check=0;
+    
+    while(true) {
+      auto bucket = &buckets[directory_ind];
+      while (bucket != nullptr) {
+        for (size_t i = 0; i < BucketSize; i++) {
+            const auto& current_key = bucket->keys[i];
+            if (current_key == Sentinel) 
+              break;
+            if (current_key == key) {
+              Payload payload = bucket->payloads[i];
+              return 1;
+              // ans+=bucket->payloads[0];
+              // std::cout<<"bucket count: "<<bucket_count<<std::endl;
+            }
+            if (current_key > key) {
+              exit_check=1;
+              break;
+            }
         }
+        if (exit_check==1) {
+          break;
+        }
+        bucket = bucket->next;
       }
-      // bucket_count++;
-      bucket = bucket->next;
-    //   prefetch_next(bucket);
+      if (exit_check==1) {
+        break;
+      }
+      directory_ind++;
     }
-
-    // std::cout<<"bucket count: "<<bucket_count<<std::endl;
     return 0;
-    // return end();
+
   }
 
-  int lookUp(const Key& key, std::vector<char>& value) {
-    assert(key != Sentinel);
-
+  forceinline int lookUp(const Key& key, std::vector<char>& value) {
+    // assert(key != Sentinel);
     // obtain directory bucket
-    const size_t directory_ind = model(key)%buckets.size();
-
-    auto bucket = &buckets[directory_ind];
-    // prefetch_next(bucket);
-
-    // since BucketSize is a template arg and therefore compile-time static,
-    // compiler will recognize that all branches of this if/else but one can
-    // be eliminated during optimization, therefore making this a 0 runtime
-    // cost specialization
-
-    // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-    // this nested loop construction anyways.
-
-    while (bucket != nullptr) {
-      for (size_t i = 0; i < BucketSize; i++) {
-        const auto& current_key = bucket->keys[i];
-        if (current_key == Sentinel) break;
-        if (current_key == key) {
-          Payload pos = bucket->payloads[i];
-          int nread = pread(storageFile, value.data(), sizeof(value), pos * blockSize);
-          return nread;
+    size_t directory_ind = model(key)%(buckets.size());
+    int exit_check=0;
+    
+    while(true) {
+      auto bucket = &buckets[directory_ind];
+      while (bucket != nullptr) {
+        for (size_t i = 0; i < BucketSize; i++) {
+            const auto& current_key = bucket->keys[i];
+            const Payload current_pos = bucket->payloads[i];
+            if (current_key == Sentinel) 
+              break;
+            if (current_key == key) {
+              //stoc->stocRead(current_pos, value);
+              return 1;
+            }
+            if (current_key > key) {
+              exit_check=1;
+              break;
+            }
         }
+        if (exit_check==1) {
+          break;
+        }
+        bucket = bucket->next;
       }
-      // bucket_count++;
-      bucket = bucket->next;
-      //  prefetch_next(bucket);
+      if (exit_check==1) {
+        break;
+      }
+      directory_ind++;
     }
-
-    // std::cout<<"bucket count: "<<bucket_count<<std::endl;
     return 0;
-    // return end();
+
   }
+
 
   std::string name() {
     std::string prefix = (ManualPrefetch ? "Prefetched" : "");

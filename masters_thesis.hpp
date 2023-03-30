@@ -23,9 +23,10 @@
 #include "include/cuckoo.hpp"
 #include "include/cuckoo_file.hpp"
 #include "include/cuckoo_model.hpp"
-//#include "include/cuckoo_model_file.hpp"
+#include "include/cuckoo_model_file.hpp"
 
 #include "include/ludotable.hpp"
+#include "include/ludotable_rq.hpp"
 
 // Order is important
 #include "include/convenience/undef.hpp"

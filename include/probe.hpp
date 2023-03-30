@@ -91,21 +91,16 @@ class KapilLinearHashTable {
     assert(index < buckets.size());
     auto start=index;
 
-    for(;(index-start<50000);)
-    {
+    for(;(index-start<50000);) {
       // std::cout<<"index: "<<index<<std::endl;
-      if(buckets[index%buckets.size()].insert(key, payload, *tape))
-      {
+      if(buckets[index%buckets.size()].insert(key, payload, *tape)) {
         return ;
-      }
-      else
-      {
+      } else {
         index++;
       }
     }
 
     throw std::runtime_error("Building " + this->name() + " failed: during probing, all buckets along the way are full");
-
     return ;
 
   }
@@ -122,12 +117,9 @@ class KapilLinearHashTable {
         tape(std::make_unique<support::Tape<Bucket>>()) {
 
 
-    if (OverAlloc<10000)
-    {
+    if (OverAlloc<10000) {
       buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
-    } 
-    else
-    {
+    } else {
       buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
     }               
     // ensure data is sorted
@@ -155,8 +147,6 @@ class KapilLinearHashTable {
       insert(data[i].first,data[i].second);
     }
 
- 
-   
     auto start = std::chrono::high_resolution_clock::now(); 
 
     for(uint64_t i=data.size()-insert_count;i<data.size();i++) {
@@ -246,8 +236,7 @@ class KapilLinearHashTable {
   }
 
 
-  void print_data_statistics()
-  {
+  void print_data_statistics(bool output = false) {
     std::vector<uint64_t> dist_from_ideal;
     std::vector<uint64_t> dist_to_empty;
 
@@ -255,58 +244,45 @@ class KapilLinearHashTable {
     std::map<int,int> dist_from_ideal_map;
     std::map<int,int> dist_to_empty_map;
 
-    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++)
-    {
+    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++) {
       auto bucket = &buckets[buck_ind%buckets.size()];
 
-      for (size_t i = 0; i < BucketSize; i++)
-       {
-        
-          const auto& current_key = bucket->keys[i];
-          if(current_key==Sentinel)
-          {
-            break;
-          }
-
-          size_t directory_ind = hashfn(current_key)%(buckets.size());
-          // std::cout<<" pred val: "<<directory_ind<<" key val: "<<current_key<<" bucket val: "<<buck_ind<<std::endl;
-          dist_from_ideal.push_back(directory_ind-buck_ind);
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        if(current_key==Sentinel) {
+          break;
         }
+        size_t directory_ind = hashfn(current_key)%(buckets.size());
+        dist_from_ideal.push_back(directory_ind-buck_ind);
+      }
+    }
 
-    }  
-
-    for(int buck_ind=0;buck_ind<buckets.size();buck_ind++)
-    {
+    for(int buck_ind=0;buck_ind<buckets.size();buck_ind++) {
       auto directory_ind=buck_ind;
       auto start=directory_ind;
-      for(;directory_ind<start+50000;)
-      {
+      for(;directory_ind<start+50000;) {
         auto bucket = &buckets[directory_ind%buckets.size()];
 
         // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
         
         bool found_sentinel=false;
-        for (size_t i = 0; i < BucketSize; i++)
-        {
-            const auto& current_key = bucket->keys[i];
-            // std::cout<<current_key<<" match "<<key<<std::endl;
-            if (current_key == Sentinel) {
-              found_sentinel=true;
-              break;
-              // return end();
-              }
+        for (size_t i = 0; i < BucketSize; i++) {
+          const auto& current_key = bucket->keys[i];
+          // std::cout<<current_key<<" match "<<key<<std::endl;
+          if (current_key == Sentinel) {
+            found_sentinel=true;
+            break;
+            // return end();
+            }
         }
 
-        if(found_sentinel)
-        {
+        if(found_sentinel) {
           break;
         }
         
         directory_ind++;        
       }  
-
       dist_to_empty.push_back(directory_ind-buck_ind);
-
     } 
 
 
@@ -314,29 +290,36 @@ class KapilLinearHashTable {
     std::sort(dist_to_empty.begin(),dist_to_empty.end());
 
 
-    for(int i=0;i<dist_from_ideal.size();i++)
-    {
+    for(int i=0;i<dist_from_ideal.size();i++) {
       dist_from_ideal_map[dist_from_ideal[i]]=0;
     }
 
-    for(int i=0;i<dist_from_ideal.size();i++)
-    {
+    for(int i=0;i<dist_from_ideal.size();i++) {
       dist_from_ideal_map[dist_from_ideal[i]]+=1;
     }
 
-    for(int i=0;i<dist_to_empty.size();i++)
-    {
+    for(int i=0;i<dist_to_empty.size();i++) {
       dist_to_empty_map[dist_to_empty[i]]=0;
     }
 
-    for(int i=0;i<dist_to_empty.size();i++)
-    {
+    for(int i=0;i<dist_to_empty.size();i++) {
       dist_to_empty_map[dist_to_empty[i]]+=1;
     }
 
+    if (output) {
+      std::ofstream outFile("../results/ideal_pos_diff_probe.json");
+      if (outFile.is_open()) {
+        for (auto it = dist_from_ideal_map.begin(); it != dist_from_ideal_map.end(); ++it) {
+            outFile << it->first << "," << it->second << std::endl;
+        }
+        outFile.close();
+      } else {
+        std::cout << "Error opening file!" << std::endl;
+      }
+      outFile.close();
+    }
 
     std::map<int, int>::iterator it;
-
     if (!disablelogging) std::cout<<"Start Distance To Empty"<<std::endl;
 
     for (it = dist_to_empty_map.begin(); it != dist_to_empty_map.end(); it++)
@@ -363,22 +346,16 @@ class KapilLinearHashTable {
 
     return;
 
-
-
   }
 
-  forceinline int hash_val(const Key& key)
-  {
+  forceinline int hash_val(const Key& key) {
     return hashfn(key);
   }
 
 
-  int useless_func()
-  {
+  int useless_func() {
     return 0;
   }
-
-
 
 
   /**
@@ -404,44 +381,21 @@ class KapilLinearHashTable {
 
     // std::cout<<" key: "<<key<<std::endl;
 
-    for(;directory_ind<start+50000;)
-    {
-       auto bucket = &buckets[directory_ind%buckets.size()];
-
-      // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-      // this nested loop construction anyways.
-
-      // std::cout<<"probe rate: "<<directory_ind+1-start<<std::endl;
-      // bool exit=false;
-        for (size_t i = 0; i < BucketSize; i++)
-       {
-          const auto& current_key = bucket->keys[i];
-          if (current_key == Sentinel) {
-            return 0;
-            // return end();
-            }
-          if (current_key == key){ 
-            return 1;
-            // return {directory_ind, i, bucket, *this};
-          }
+    for(;directory_ind<start+50000;) {
+      auto bucket = &buckets[directory_ind%buckets.size()];
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        if (current_key == Sentinel) {
+          return 0;
         }
-      // if(exit)
-      // {
-      //   break;
-      // }
-      directory_ind++;  
-
-      //   prefetch_next(bucket);
-      
+        if (current_key == key){
+          Payload payload = bucket->payloads[i];
+          return 1;
+        }
+        directory_ind++;  
+      }
     }
-
-   
-  //  while(true)
-  //  {
-  //    std::cout<<"ERROR"<<std::endl;
-  //  }
     return 0;
-    // return end();
   }
 
   std::string name() {

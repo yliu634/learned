@@ -20,7 +20,11 @@ public:
   recursive_mutex locks[8192];
   uint32_t disktime = 0;
 
-  explicit Storage(string fileName, uint32_t size, size_t blockSize = 4096, uint16_t port = 0) :
+  explicit Storage() {
+
+  }
+
+  explicit Storage(string fileName, uint32_t size, size_t blockSize = 512, uint16_t port = 0) :
       size(size), blockSize(blockSize), fileName(fileName) {
 
     size_t num_bytes = size * blockSize;
@@ -50,6 +54,7 @@ public:
     
     numLock = 0;
     buff_ = vector<char>(blockSize);
+    wbuf = new char[blockSize];
     //dis_ = new uniform_int_distribution<>(0, 255);
 
   }
@@ -64,8 +69,13 @@ public:
   
   int stocInsert(uint64_t pos, vector<char> & value) {
     std::lock_guard g(locks[(numLock ++) % 8192]);
-    pwrite(storageFile, value.data(), blockSize, pos * blockSize);
-    return pos;
+    std::memcpy(wbuf, value.data(), blockSize);
+    posix_memalign(&wbuf, blockSize, blockSize);
+    int nwrite = pwrite(storageFile, wbuf, blockSize, pos * blockSize);
+    if (nwrite < 0) {
+      std::cout << "There is sth wrong with stoc.write()" << std::endl;
+    }
+    return nwrite;
   }
   
   int stocUpdate(uint64_t pos, vector<char> & value) {
@@ -76,9 +86,9 @@ public:
   int stocRead(uint64_t pos, vector<char> &value) {
     // vector<char> buff(blockSize);
     // std::lock_guard g(locks[(numLock ++) % 8192]);
-    // disktime ++;
+    disktime ++;
     void *buf;
-    posix_memalign(&buf, 512, 512);
+    posix_memalign(&buf, blockSize, blockSize);
     int nread = pread(storageFile, buf, blockSize, pos * blockSize);
     // std::cout << "ludo read disk: " << disktime << std::endl;
     return nread;
@@ -86,6 +96,7 @@ public:
 
 private:
   uint32_t numLock;
+  void *wbuf;
   std::random_device rd_;
   std::mt19937 gen_;
   vector<char> buff_;

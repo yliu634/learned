@@ -1,14 +1,14 @@
-2023-03-11T22:44:25-07:00
+2023-03-28T23:41:57-07:00
 Running ../cmake-build-release/src/benchmarks
-Run on (32 X 2920.78 MHz CPU s)
+Run on (8 X 4000 MHz CPU s)
 CPU Caches:
-  L1 Data 32 KiB (x16)
-  L1 Instruction 32 KiB (x16)
-  L2 Unified 512 KiB (x16)
-  L3 Unified 16384 KiB (x8)
-Load Average: 0.27, 0.09, 0.10
--------------------------------------------------------------------------------------------------------------------------------
-Benchmark                                                                     Time             CPU   Iterations UserCounters...
--------------------------------------------------------------------------------------------------------------------------------
-PointLookupLudo<KapilLudoTable, 0>/1000000/5/0/iterations:200000            116 ns          116 ns       200000 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:wiki:uniform:865
-PointLookupLudo<KapilLudoTable, 0>/1000000/2/0/iterations:200000            109 ns          109 ns       200000 data_elem_count=1000k table_bits_per_key=0 table_bytes=0 table_directory_bytes=0 KapilLudoTable<8, 8>:uniform:uniform:81
+  L1 Data 32 KiB (x4)
+  L1 Instruction 32 KiB (x4)
+  L2 Unified 256 KiB (x4)
+  L3 Unified 8192 KiB (x1)
+Load Average: 0.27, 0.09, 0.02
+***WARNING*** CPU scaling is enabled, the benchmark real time measurements may be noisy and will incur extra overhead.
+----------------------------------------------------------------------------------------------------------------------
+Benchmark                                                                            Time             CPU   Iterations
+----------------------------------------------------------------------------------------------------------------------
+PointLookupMultipleLudo<KapilMultiLudoTable, 900>/1000000/5/0/iterations:20       8737 ns         8641 ns           20

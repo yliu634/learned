@@ -115,7 +115,6 @@ with open(file) as data_file:
 
         return fig
 
-
     def plot_construction_times():
         fig = px.bar(
             ct_df,

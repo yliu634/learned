@@ -4,6 +4,7 @@
 // originally taken from the Stanford FutureData index baselines repo. Original copyright:
 // Copyright (c) 2017-present Peter Bailis, Kai Sheng Tai, Pratiksha Thaker, Matei Zaharia
 // MIT License
+#include <immintrin.h>
 
 #include <algorithm>
 #include <cassert>
@@ -16,7 +17,6 @@
 #include <optional>
 #include <random>
 #include <vector>
-#include <immintrin.h>
 
 #include "convenience/builtins.hpp"
 
@@ -108,6 +108,7 @@ namespace kapilhashtable {
          Payload victim_payload = victim_bucket->slots[victim_index].payload;
          victim_bucket->slots[victim_index] = {.key = key, .payload = payload};
          return std::make_optional(std::make_pair(victim_key, victim_payload));
+
       };
    };
 
@@ -150,14 +151,13 @@ namespace kapilhashtable {
       KapilCuckooHashTable(std::vector<std::pair<Key, Payload>> data)
          : MaxKickCycleLength(50000) {
 
-         if (OverAlloc<10000)
-         {
+         /*if (OverAlloc<10000) {
             buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
-         } 
-         else
-         {
+         } else {
             buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
-         }         
+         }*/
+         buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
+
          std::sort(data.begin(), data.end(),
             [](const auto& a, const auto& b) { return a.first < b.first; });
 
@@ -167,31 +167,11 @@ namespace kapilhashtable {
          std::transform(data.begin(), data.end(), std::back_inserter(keys),
                         [](const auto& p) { return p.first; });
 
-
-         // std::cout<<std::endl<<"Start Here "<<BucketSize<<" "<<OverAlloc<<" "<<hashfn.name()<<" Traditional Cuckoo Biased 5 "<<0<<" 0"<<std::endl<<std::endl;
-            
-
-         // train model on sorted data
-         // model.train(keys.begin(), keys.end(), buckets.size());
-
-         // insert all keys according to model prediction.
-         // since we sorted above, this will permit further
-         // optimizations during lookup etc & enable implementing
-         // efficient iterators in the first place.
-         // for (const auto& d : data) insert(d.first, d.second);
-
-         //std::random_shuffle(data.begin(), data.end());
-         //uint64_t insert_count=1000000;
-
-         //for(uint64_t i=0;i<data.size()-insert_count;i++) {
-         //   insert(data[i].first,data[i].second);
-         //}
-
          auto start = std::chrono::high_resolution_clock::now(); 
 
-         for(uint64_t i=0;i<data.size();i++)
-         {
+         for(uint64_t i=0;i<data.size();i++) {
             insert(data[i].first, i);
+            std::cout << "This is the " << i << std::endl;
          }
 
          auto stop = std::chrono::high_resolution_clock::now(); 
@@ -200,7 +180,7 @@ namespace kapilhashtable {
 
       }
 
-   int lookup(const Key& key) const {
+      int lookup(const Key& key) const {
          const auto h1 = hashfn1(key);
          const auto i1 = h1%buckets.size();
 
@@ -227,38 +207,38 @@ namespace kapilhashtable {
          return 0;
       }
 
-   int useless_func() {
-    return 0;
-   }
+      int useless_func() {
+      return 0;
+      }
 
 
-   void print_data_statistics() {
-      size_t primary_key_cnt = 0;
-      size_t total_cnt=0;
+      void print_data_statistics() {
+         size_t primary_key_cnt = 0;
+         size_t total_cnt=0;
 
-      for (uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++) {
+         for (uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++) {
 
-         const Bucket* b1 = &buckets[buck_ind];
-         for (size_t i = 0; i < BucketSize; i++) {
-            if (b1->slots[i].key == Sentinel) {
-               break;
-               // return std::make_optional(payload);
+            const Bucket* b1 = &buckets[buck_ind];
+            for (size_t i = 0; i < BucketSize; i++) {
+               if (b1->slots[i].key == Sentinel) {
+                  break;
+                  // return std::make_optional(payload);
+               }
+               size_t directory_ind = hashfn1(b1->slots[i].key)%(buckets.size());
+               if(directory_ind==buck_ind) {
+                  primary_key_cnt++;
+               }
+               total_cnt++;
             }
-            size_t directory_ind = hashfn1(b1->slots[i].key)%(buckets.size());
-            if(directory_ind==buck_ind) {
-               primary_key_cnt++;
-            }
-            total_cnt++;
-         }
-      } 
+         } 
 
-      std::cout<<" Primary Key Ratio: "<<primary_key_cnt*1.00/total_cnt<<std::endl;
+         std::cout<<" Primary Key Ratio: "<<primary_key_cnt*1.00/total_cnt<<std::endl;
 
-      return;
-   }
+         return;
+      }
 
 
-   std::map<std::string, std::string> lookup_statistics(const std::vector<Key>& dataset) const {
+      std::map<std::string, std::string> lookup_statistics(const std::vector<Key>& dataset) const {
          size_t primary_key_cnt = 0;
 
          for (const auto& key : dataset) {
@@ -367,186 +347,4 @@ namespace kapilhashtable {
       }
    };
 
-   //   template<class Payload, class HashFn1, class HashFn2, class ReductionFn1, class ReductionFn2, class KickingFn,
-   //            uint32_t Sentinel>
-   //   class KapilCuckooHashTable<uint32_t, Payload, 8, HashFn1, HashFn2, ReductionFn1, ReductionFn2, KickingFn, Sentinel> {
-   //     public:
-   //      typedef uint32_t KeyType;
-   //      typedef Payload PayloadType;
-   //
-   //     private:
-   //      static constexpr uint32_t BucketSize = 8;
-   //      const size_t MaxKickCycleLength;
-   //
-   //      const HashFn1 hashfn1;
-   //      const HashFn2 hashfn2;
-   //      const ReductionFn1 reductionfn1;
-   //      const ReductionFn2 reductionfn2;
-   //      KickingFn kickingfn;
-   //
-   //      struct Bucket {
-   //         uint32_t keys[BucketSize] __attribute((aligned(32)));
-   //         Payload values[BucketSize];
-   //      } packed;
-   //
-   //      Bucket* buckets_;
-   //      size_t num_buckets_; // Total number of buckets
-   //
-   //      std::mt19937 rand_; // RNG for moving items around
-   //
-   //     public:
-   //   KapilCuckooHashTable(const size_t& buckets.size())
-   //      : MaxKickCycleLength(4096), hashfn1(HashFn1()), hashfn2(HashFn2()),
-   //        reductionfn1(ReductionFn1(directory_address_count(buckets.size()))),
-   //        reductionfn2(ReductionFn2(directory_address_count(buckets.size()))), kickingfn(KickingFn()),
-   //        num_buckets_(directory_address_count(buckets.size())) {
-   //      // Allocate memory
-   //      int r = posix_memalign(reinterpret_cast<void**>(&buckets_), 32, num_buckets_ * sizeof(Bucket));
-   //      if (r != 0)
-   //         throw std::runtime_error("Could not memalign allocate for cuckoo hash map");
-   //
-   //      // Ensure all slots are in cleared state
-   //      clear();
-   //   }
-   //
-   //      ~KapilCuckooHashTable() {
-   //         free(buckets_);
-   //      }
-   //
-   //      std::optional<Payload> lookup(const uint32_t& key) const {
-   //         const auto h1 = hashfn1(key);
-   //         const auto i1 = reductionfn1(h1);
-   //
-   //         Bucket* b1 = &buckets_[i1];
-   //         __m256i vkey = _mm256_set1_epi32(key);
-   //         __m256i vbucket = _mm256_load_si256(reinterpret_cast<const __m256i*>(&b1->keys));
-   //         __m256i cmp = _mm256_cmpeq_epi32(vkey, vbucket);
-   //         int mask = _mm256_movemask_epi8(cmp);
-   //         if (mask != 0) {
-   //            int index = __builtin_ctz(mask) / 4;
-   //            auto val = b1->values[index];
-   //            return std::make_optional(val);
-   //         }
-   //
-   //         auto i2 = reductionfn2(hashfn2(key, h1));
-   //         if (i2 == i1) {
-   //            i2 = (i1 == num_buckets_ - 1) ? 0 : i1 + 1;
-   //         }
-   //         Bucket* b2 = &buckets_[i2];
-   //         vbucket = _mm256_load_si256(reinterpret_cast<const __m256i*>(&b2->keys));
-   //         cmp = _mm256_cmpeq_epi32(vkey, vbucket);
-   //         mask = _mm256_movemask_epi8(cmp);
-   //         if (mask != 0) {
-   //            int index = __builtin_ctz(mask) / 4;
-   //            auto val = b2->values[index];
-   //            return std::make_optional(val);
-   //         }
-   //
-   //         return std::nullopt;
-   //      }
-   //
-   //      std::map<std::string, std::string> lookup_statistics(const std::vector<KeyType>& dataset) {
-   //         size_t primary_key_cnt;
-   //
-   //         for (const auto& key : dataset) {
-   //            const auto h1 = hashfn1(key);
-   //            const auto i1 = reductionfn1(h1);
-   //
-   //            Bucket* b1 = &buckets_[i1];
-   //            __m256i vkey = _mm256_set1_epi32(key);
-   //            __m256i vbucket = _mm256_load_si256(reinterpret_cast<const __m256i*>(&b1->keys));
-   //            __m256i cmp = _mm256_cmpeq_epi32(vkey, vbucket);
-   //            int mask = _mm256_movemask_epi8(cmp);
-   //            if (mask != 0) {
-   //               primary_key_cnt++;
-   //            }
-   //         }
-   //
-   //         return {
-   //            {"primary_key_ratio",
-   //             std::to_string(static_cast<long double>(primary_key_cnt) / static_cast<long double>(dataset.size()))},
-   //         };
-   //      }
-   //
-   //      void insert(const uint32_t& key, const Payload& value) {
-   //         insert(key, value, 0);
-   //      }
-   //
-   //      static constexpr forceinline size_t bucket_byte_size() {
-   //         return sizeof(Bucket);
-   //      }
-   //
-   //      static forceinline std::string name() {
-   //         return "simd_cuckoo_" + KickingFn::name();
-   //      }
-   //
-   //      static forceinline std::string hash_name() {
-   //         return HashFn1::name() + "-" + HashFn2::name();
-   //      }
-   //
-   //      static forceinline std::string reducer_name() {
-   //         return ReductionFn1::name() + "-" + ReductionFn2::name();
-   //      }
-   //
-   //      static constexpr forceinline size_t bucket_size() {
-   //         return BucketSize;
-   //      }
-   //
-   //      static constexpr forceinline size_t directory_address_count(const size_t& buckets.size()) {
-   //         return (buckets.size() + BucketSize - 1) / BucketSize;
-   //      }
-   //
-   //      void clear() {
-   //         for (size_t i = 0; i < num_buckets_; i++) {
-   //            for (size_t j = 0; j < BucketSize; j++) {
-   //               buckets_[i].keys[j] = Sentinel;
-   //            }
-   //         }
-   //      }
-   //
-   //     private:
-   //      void insert(const uint32_t& key, const Payload& value, size_t kick_count) {
-   //         // TODO: track max kick_count for result graphs
-   //         if (kick_count > MaxKickCycleLength) {
-   //            throw std::runtime_error("maximum kick cycle length (" + std::to_string(MaxKickCycleLength) + ") reached");
-   //         }
-   //
-   //         const auto h1 = hashfn1(key);
-   //         const auto i1 = reductionfn1(h1);
-   //         auto i2 = reductionfn2(hashfn2(key, h1));
-   //
-   //         if (unlikely(i2 == i1)) {
-   //            i2 = (i1 == num_buckets_ - 1) ? 0 : i1 + 1;
-   //         }
-   //
-   //         Bucket* b1 = &buckets_[i1];
-   //         Bucket* b2 = &buckets_[i2];
-   //
-   //         // Update old value if the key is already in the table
-   //         __m256i vkey = _mm256_set1_epi32(key);
-   //         __m256i vbucket = _mm256_load_si256(reinterpret_cast<const __m256i*>(&b1->keys));
-   //         __m256i cmp = _mm256_cmpeq_epi32(vkey, vbucket);
-   //         int mask = _mm256_movemask_epi8(cmp);
-   //         if (mask != 0) {
-   //            int index = __builtin_ctz(mask) / 4;
-   //            b1->values[index] = value;
-   //            return;
-   //         }
-   //
-   //         vbucket = _mm256_load_si256(reinterpret_cast<const __m256i*>(&b2->keys));
-   //         cmp = _mm256_cmpeq_epi32(vkey, vbucket);
-   //         mask = _mm256_movemask_epi8(cmp);
-   //         if (mask != 0) {
-   //            int index = __builtin_ctz(mask) / 4;
-   //            b2->values[index] = value;
-   //            return;
-   //         }
-   //
-   //         // Way to go Mr. Stroustrup
-   //         if (const auto kicked =
-   //                kickingfn.template operator()<Bucket, uint32_t, Payload, BucketSize, Sentinel>(b1, b2, key, value)) {
-   //            insert(kicked.value().first, kicked.value().second, kick_count + 1);
-   //         }
-   //      }
-   //   };
 } // namespace hashtable

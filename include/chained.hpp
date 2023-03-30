@@ -211,13 +211,11 @@ class KapilChainedHashTable {
 
 
 
-  void print_data_statistics()
-  {
+  void print_data_statistics(bool output = false) {
     std::vector<uint64_t> num_ele;
     std::map<int,int> num_ele_map;
 
-    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++)
-    {
+    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++) {
       auto bucket = &buckets[buck_ind%buckets.size()];
 
       int ele_count=0;
@@ -228,13 +226,11 @@ class KapilChainedHashTable {
           if (current_key == Sentinel) break;
           ele_count++;
         }
-        // bucket_count++;
         bucket = bucket->next;
-      //   prefetch_next(bucket);
       }
 
       num_ele.push_back(ele_count);
-    }  
+    }
 
     std::sort(num_ele.begin(),num_ele.end());
 
@@ -263,25 +259,17 @@ class KapilChainedHashTable {
         //           << std::endl;
     }
 
-
     return;
-
-
 
   }
 
-  int useless_func()
-  {
+  int useless_func() {
     return 0;
   }
 
-  forceinline int hash_val(const Key& key)
-  {
+  forceinline int hash_val(const Key& key) {
     return hashfn(key)%buckets.size();
   }
-
-
-  
 
 
   /**
@@ -300,13 +288,6 @@ class KapilChainedHashTable {
   forceinline int operator[](const Key& key) const {
     assert(key != Sentinel);
 
-    // will become NOOP at compile time if ManualPrefetch == false
-    // const auto prefetch_next = [](const auto& bucket) {
-    //   if constexpr (ManualPrefetch)
-    //     // manually prefetch next if != nullptr;
-    //     if (bucket->next != nullptr) prefetch(bucket->next, 0, 0);
-    // };
-
     // obtain directory bucket
     const size_t directory_ind = hashfn(key)%buckets.size();
     // std::cout<<"key: "<<key<<std::endl;
@@ -314,95 +295,19 @@ class KapilChainedHashTable {
 
     auto bucket = &buckets[directory_ind];
 
-    // return {directory_ind, 0, bucket, *this};
-
-    // prefetch_next(bucket);
-
-    // since BucketSize is a template arg and therefore compile-time static,
-    // compiler will recognize that all branches of this if/else but one can
-    // be eliminated during optimization, therefore making this a 0 runtime
-    // cost specialization
-// #ifdef __AVX512F__
-//     if constexpr (BucketSize == 8 && sizeof(Key) == 8) {
-//       while (bucket != nullptr) {
-//         auto vkey = _mm512_set1_epi64(key);
-//         auto vbucket = _mm512_loadu_si512((const __m512i*)&bucket->keys);
-//         auto mask = _mm512_cmpeq_epi64_mask(vkey, vbucket);
-
-//         if (mask != 0) {
-//           size_t index = __builtin_ctz(mask);
-//           assert(index >= 0);
-//           assert(index < BucketSize);
-//           return {directory_ind, index, bucket, *this};
-//         }
-
-//         bucket = bucket->next;
-//         prefetch_next(bucket);
-//       }
-
-//       return end();
-//     }
-// #endif
-// #ifdef __AVX2__
-//     if constexpr (BucketSize == 8 && sizeof(Key) == 4) {
-//       while (bucket != nullptr) {
-//         auto vkey = _mm256_set1_epi32(key);
-//         auto vbucket = _mm256_loadu_si256((const __m256i*)&bucket->keys);
-//         auto cmp = _mm256_cmpeq_epi32(vkey, vbucket);
-//         int mask = _mm256_movemask_epi8(cmp);
-//         if (mask != 0) {
-//           size_t index = __builtin_ctz(mask) >> 2;
-//           assert(index >= 0);
-//           assert(index < BucketSize);
-//           return {directory_ind, index, bucket, *this};
-//         }
-
-//         bucket = bucket->next;
-//         prefetch_next(bucket);
-//       }
-//       return end();
-//     }
-//     if constexpr (BucketSize == 4 && sizeof(Key) == 8) {
-//       while (bucket != nullptr) {
-//         auto vkey = _mm256_set1_epi64x(key);
-//         auto vbucket = _mm256_loadu_si256((const __m256i*)&bucket->keys);
-//         auto cmp = _mm256_cmpeq_epi64(vkey, vbucket);
-//         int mask = _mm256_movemask_epi8(cmp);
-//         if (mask != 0) {
-//           size_t index = __builtin_ctz(mask) >> 3;
-//           assert(index >= 0);
-//           assert(index < BucketSize);
-//           return {directory_ind, index, bucket, *this};
-//         }
-
-//         bucket = bucket->next;
-//         prefetch_next(bucket);
-//       }
-//       return end();
-//     }
-// #endif
-
-    // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-    // this nested loop construction anyways.
-
-    // int bucket_count=1;
-
     while (bucket != nullptr) {
       for (size_t i = 0; i < BucketSize; i++) {
         const auto& current_key = bucket->keys[i];
-        if (current_key == Sentinel) break;
+        if (current_key == Sentinel) 
+          break;
         if (current_key == key) {
-          // std::cout<<"bucket count: "<<bucket_count<<std::endl;
+          Payload payload = bucket->payloads[i];
           return 1;
-          // return {directory_ind, i, bucket, *this};
-          }
+        }
       }
-      // bucket_count++;
       bucket = bucket->next;
-    //   prefetch_next(bucket);
     }
 
-    // std::cout<<"bucket count: "<<bucket_count<<std::endl;
     return 0;
     // return end();
   }
@@ -425,4 +330,5 @@ class KapilChainedHashTable {
 
   size_t byte_size() const { return model_byte_size() + directory_byte_size(); }
 };
+
 }  // namespace masters_thesis

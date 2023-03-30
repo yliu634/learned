@@ -182,7 +182,7 @@ public:
   
   // The key type is fixed as a pre-hashed key for this specialized use.
   LudoTable(const vector<pair<K, V>> &kv,
-                   uint32_t capacity_ = 2048)
+                  uint32_t capacity_ = 1024)
       : locator(1U, true), nKeys(0), capacity(capacity_) {
     
     uint32_t toInsert = (uint32_t) kv.size();
@@ -201,27 +201,47 @@ public:
         for (int i = 0; i < toInsert; ++i) {
           insert(kv[i].first, kv[i].second, false);
         }
-      }
-      
+      } 
   }
   
+  LudoTable(const vector<K> &kv, 
+                  uint32_t capacity_ = 1024)
+      : locator(1U, true), nKeys(0), capacity(capacity_) {
+
+    uint32_t toInsert = (uint32_t) kv.size();
+    num_buckets_ = 64U;
+    
+    for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; 
+              capacity < capacity_; 
+              capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
+      num_buckets_ <<= 1U;
+      buckets_.resize(num_buckets_, empty_bucket);
+      locator.resizeCapacity(toInsert);
+      if (toInsert) {
+        for (uint32_t i = 0; i <= kv.size(); ++i) {
+          insert(kv[i], i, false);
+        }
+      }
+  }
+
   // The key type is fixed as a pre-hashed key for this specialized use.
   LudoTable(const vector<K> &keys = vector<K>(), 
-                   const vector<V> &values = vector<V>(),
-                   uint32_t capacity_ = 64)
+                  const vector<V> &values = vector<V>(),
+                  uint32_t capacity_ = 64)
       : locator(1U, true), nKeys(0), capacity(capacity_) {
     
     uint32_t toInsert = min((uint32_t) min(keys.size(), values.size()), capacity);
     
     num_buckets_ = 64U;
     
-    for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; capacity < capacity_; capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
+    for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; 
+              capacity < capacity_;
+              capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
       num_buckets_ <<= 1U;
     
     buckets_.resize(num_buckets_, empty_bucket);
     locator.resizeCapacity(toInsert);
-    // till this line, an empty ludo is ready
-    if (toInsert) { // the oldMap should be initialized
+    if (toInsert) {
       for (int i = 0; i < toInsert; ++i) {
         insert(keys[i], values[i], false);
       }
@@ -338,9 +358,9 @@ public:
     if (enlarge && integrity) {
       if (powerSize(times)) return;
     }
-//    } else if (shrink && integrity) {
-//      if (foldSize(times)) return;
-//    }
+    //    } else if (shrink && integrity) {
+    //      if (foldSize(times)) return;
+    //    }
     // at here, ludo+fallback is still integral as a whole
     
     integrity = false;
@@ -1091,6 +1111,7 @@ public:
   
   explicit DataPlaneLudo(const LudoTable<K, V, VL> &cp) : locator(cp.locator) {
     h = cp.h;
+    hlookup = new FastHasher64<K>();
     digestH = cp.digestH;
     num_buckets_ = cp.num_buckets_;
     resetMemory();
@@ -1162,38 +1183,42 @@ public:
     return out;
   }
   
+  FastHasher64<K> *hlookup;   //1094
+
   // Returns true if found.  Sets *out = value.
   inline bool lookUp(const K &k, V &out) const {
     uint32_t bktId[2];
 
-    auto start = std::chrono::high_resolution_clock::now(); 
+    //auto start = std::chrono::high_resolution_clock::now(); 
     fast_map_to_buckets(h(k), bktId, num_buckets_);
-    auto stop = std::chrono::high_resolution_clock::now(); 
-    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
-    std::cout << "fast map to hash: "<< duration.count() << " nanoseconds" << std::endl;
+    //auto stop = std::chrono::high_resolution_clock::now(); 
+    //auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+    //std::cout << "fast map to hash: "<< duration.count() << " nanoseconds" << std::endl;
 
 
     while (true) {
+      
       uint8_t va1 = lock[bktId[0] & 8191], vb1 = lock[bktId[1] & 8191];
       COMPILER_BARRIER();
       if (va1 % 2 == 1 || vb1 % 2 == 1) continue;
-      
       const Bucket &bucket = buckets[bktId[locator.lookUp(k)]];
       
       COMPILER_BARRIER();
       uint8_t va2 = lock[bktId[0] & 8191], vb2 = lock[bktId[1] & 8191];
-      
       if (va1 != va2 || vb1 != vb2) continue;
       
+      /*
       start = std::chrono::high_resolution_clock::now();
       uint64_t i = FastHasher64<K>(bucket.seed)(k) >> 62;
       stop = std::chrono::high_resolution_clock::now();
       duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
       std::cout<< "fast haser 64: "<< duration.count() << " nanoseconds" << std::endl;
+      */
+      //hlookup->setSeed(bucket.seed);
+      //out = bucket.values[(*hlookup)(k) >> 62];
+      //out = bucket.values[FastHasher64<K>(bucket.seed)(k) >> 62];
+      out = bucket.values[FastHasher64<K>(bucket.seed)(k) >> 62];
 
-
-      out = bucket.values[i];
-      
       return true;
     }
   }

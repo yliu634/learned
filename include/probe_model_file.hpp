@@ -11,11 +11,15 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <map>
+#include <fstream>
 
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdint>
 
+#include "include/blob/json.hpp"
+#include "include/blob/filestore.hpp"
 #include "include/convenience/builtins.hpp"
 #include "include/support.hpp"
 
@@ -29,9 +33,14 @@ class KapilLinearModelHashTableFile {
     
   public:
     Model model;
+    int numLock = 0;
     uint32_t disktime = 0;
     uint32_t lookupCall = 0;
-
+    std::vector<char> value;
+    std::recursive_mutex locks[8192];
+    std::string filepath = "../datasets/oneFile.txt";
+    filestore::Storage *stoc;
+    
   struct Bucket {
     std::array<Key, BucketSize> keys;
     std::array<Payload, BucketSize> payloads;
@@ -52,8 +61,6 @@ class KapilLinearModelHashTableFile {
   // directory of buckets
   std::vector<Bucket> buckets;
   bool disablelogging  = true;
-  // model for predicting the correct index
-  //  Model model;
 
   /// allocator for buckets
   std::unique_ptr<support::Tape<Bucket>> tape;
@@ -101,6 +108,7 @@ class KapilLinearModelHashTableFile {
     for(;(index-start<5000000);) {
       if(bucketInsert(buckets[index%buckets.size()], key, payload, *tape))
       {
+        //stc->stocInsert(payload, value);
         return;
       }
       else
@@ -110,61 +118,25 @@ class KapilLinearModelHashTableFile {
     }
 
     throw std::runtime_error("Building " + this->name() + " failed: during probing, all buckets along the way are full");
-
-    return ;
+    return;
 
   }
-
- public:
-  int storageFile = -1;
-  uint32_t size;
-  std::string fileName = "/mnt/datasets/oneFile.txt";
-  std::recursive_mutex locks[8192];
-  int numLock = 0;
 
 
  public:
   KapilLinearModelHashTableFile() = default;
 
-  /**
-   * Constructs a KapilLinearModelHashTableFile given a list of keys
-   * together with their corresponding payloads
-   */
   KapilLinearModelHashTableFile(std::vector<std::pair<Key, Payload>> data,
-                                std::string fileName = "/mnt/datasets/oneFile.txt")
+                                std::string fileName = "../datasets/oneFile.txt")
       :tape(std::make_unique<support::Tape<Bucket>>()) {
 
-    size = data.size();
-    size_t num_bytes = size * blockSize;
-    /*std::ofstream ofs(fileName, std::ios::out|std::ios::binary);
-    if (!ofs) {
-      std::cerr << "Error: failed to open file \"" << fileName << "\"\n";
-      return;
-    }
-    std::vector<char> buffer(1024 * 1024, '\0'); // 1 MB buffer
-    while (num_bytes > 0) {
-        std::size_t bytes_to_write = std::min(buffer.size(), num_bytes);
-        ofs.write(buffer.data(), bytes_to_write);
-        num_bytes -= bytes_to_write;
-        if (!ofs) {
-          std::cerr << "Error: could not write to file '" << fileName << "'\n";
-          return;
-        }
-    }
-    ofs.close();*/
+    //////////////////////////////////////////////////////
+    stoc = new filestore::Storage(fileName, data.size(), blockSize);
+    value.resize(blockSize, 'a');
 
-    //storageFile = open(fileName.c_str(), O_RDWR | O_CREAT | O_SYNC | O_DIRECT, 0666);
-    //ftruncate(storageFile, size * blockSize);
-    //numLock = 0;
-
-
-
-    if (OverAlloc<10000)
-    {
+    if (OverAlloc<10000) {
       buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
-    } 
-    else
-    {
+    } else {
       buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
     }               
     // ensure data is sorted
@@ -184,51 +156,26 @@ class KapilLinearModelHashTableFile {
     model.train(keys.begin(), keys.end(), buckets.size());
 
     std::cout<<"model building over"<<std::endl;
-
-    // insert all keys according to model prediction.
-    // since we sorted above, this will permit further
-    // optimizations during lookup etc & enable implementing
-    // efficient iterators in the first place.
-    // for (const auto& d : data) insert(d.first, d.second);
-
-    // std::random_shuffle(data.begin(), data.end());
-    /*uint64_t insert_count=1000000;
-
-    for(uint64_t i=0;i<keys.size()-insert_count;i++) {
-      insert(keys[i], i);
-    }*/
-
- 
    
     auto start = std::chrono::high_resolution_clock::now(); 
     for(uint64_t i=0;i<keys.size();i++) {
       insert(keys[i], i);
     }
-     auto stop = std::chrono::high_resolution_clock::now(); 
-    // auto duration = std::chrono::duration_cast<milliseconds>(stop - start); 
+    
+    auto stop = std::chrono::high_resolution_clock::now(); 
     auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
-    std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/size << " nanoseconds" << std::endl;
-
+    std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/data.size() << " nanoseconds" << std::endl;
     // std::random_shuffle(data.begin(), data.end());
 
   }
 
-  //~KapilLinearModelHashTableFile(){
-  //  close(storageFile);
-  //}
-
-   int useless_func()
-  {
+  int useless_func() {
     return 0;
   }
 
-
-  forceinline int hash_val(const Key& key)
-  {
+  forceinline int hash_val(const Key& key) {
     return model(key);
   }
-
-  
 
   class Iterator {
     size_t directory_ind, bucket_ind;
@@ -293,60 +240,46 @@ class KapilLinearModelHashTableFile {
     friend class KapilLinearModelHashTableFile;
   };
 
-
-
-  void print_data_statistics() {
+  void print_data_statistics(bool output = false) {
     std::vector<uint64_t> dist_from_ideal;
     std::vector<uint64_t> dist_to_empty;
-
 
     std::map<int,int> dist_from_ideal_map;
     std::map<int,int> dist_to_empty_map;
 
-    for(uint64_t buck_ind=0;buck_ind<buckets.size();buck_ind++) {
+    for(uint64_t buck_ind=0; buck_ind<buckets.size(); buck_ind++) {
       auto bucket = &buckets[buck_ind%buckets.size()];
 
-      for (size_t i = 0; i < BucketSize; i++) {
-        
-          const auto& current_key = bucket->keys[i];
-          if(current_key==Sentinel) {
-            break;
-          }
-          size_t directory_ind = model(current_key)%(buckets.size());
-          // std::cout<<" pred val: "<<directory_ind<<" key val: "<<current_key<<" bucket val: "<<buck_ind<<std::endl;
-          dist_from_ideal.push_back(directory_ind-buck_ind);
-        }
-
-    }  
-
-    for(int buck_ind=0;buck_ind<buckets.size();buck_ind++) {
-      auto directory_ind=buck_ind;
-      auto start=directory_ind;
-      for(;directory_ind<start+50000;) {
-        auto bucket = &buckets[directory_ind%buckets.size()];
-
-        // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-        
-        bool found_sentinel=false;
-        for (size_t i = 0; i < BucketSize; i++) {
-            const auto& current_key = bucket->keys[i];
-            // std::cout<<current_key<<" match "<<key<<std::endl;
-            if (current_key == Sentinel) {
-              found_sentinel=true;
-              break;
-              // return end();
-              }
-        }
-
-        if(found_sentinel) {
+      for (size_t i = 0; i < BucketSize; i++) { 
+        const auto& current_key = bucket->keys[i];
+        if(current_key==Sentinel) {
           break;
         }
-        
+        size_t directory_ind = model(current_key)%(buckets.size());
+        // std::cout<<" pred val: "<<directory_ind<<" key val: "<<current_key<<" bucket val: "<<buck_ind<<std::endl;
+        dist_from_ideal.push_back(directory_ind-buck_ind);
+      }
+    }  
+
+    for(int buck_ind=0; buck_ind<buckets.size(); buck_ind++) {
+      auto directory_ind = buck_ind;
+      auto start = directory_ind;
+      for(;directory_ind<start + 50000;) {
+        auto bucket = &buckets[directory_ind%buckets.size()];
+        bool found_sentinel = false;
+        for (size_t i = 0; i < BucketSize; i++) {
+          const auto& current_key = bucket->keys[i];
+          if (current_key == Sentinel) {
+            found_sentinel=true;
+            break;
+          }
+        }
+        if(found_sentinel) {
+          break;
+        } 
         directory_ind++;        
       }  
-
       dist_to_empty.push_back(directory_ind-buck_ind);
-
     } 
 
     std::sort(dist_from_ideal.begin(),dist_from_ideal.end());
@@ -370,12 +303,22 @@ class KapilLinearModelHashTableFile {
     }
 
 
+    if (output) {
+      std::ofstream outFile("../results/ideal_pos_diff_probe_model_file.json");
+      if (outFile.is_open()) {
+        for (auto it = dist_from_ideal_map.begin(); it != dist_from_ideal_map.end(); ++it) {
+            outFile << it->first << "," << it->second << std::endl;
+        }
+        outFile.close();
+      } else {
+        std::cout << "Error opening file!" << std::endl;
+      }
+      outFile.close();
+    }
+
     std::map<int, int>::iterator it;
-
     if (!disablelogging) std::cout<<"Start Distance To Empty"<<std::endl;
-
-    for (it = dist_to_empty_map.begin(); it != dist_to_empty_map.end(); it++)
-    {
+    for (it = dist_to_empty_map.begin(); it != dist_to_empty_map.end(); it++) {
       if (!disablelogging) std::cout<<"Distance To Empty: ";
       if (!disablelogging) std::cout<<it->first<<" : "<<it->second<<std::endl;
         // std::cout << it->first    // string (key)
@@ -386,8 +329,7 @@ class KapilLinearModelHashTableFile {
 
     if (!disablelogging) std::cout<<"Start Distance From Ideal"<<std::endl;
 
-    for (it = dist_from_ideal_map.begin(); it != dist_from_ideal_map.end(); it++)
-    {
+    for (it = dist_from_ideal_map.begin(); it != dist_from_ideal_map.end(); it++) {
       if (!disablelogging) std::cout<<"Distance From Ideal: ";
       if (!disablelogging) std::cout<<it->first<<" : "<<it->second<<std::endl;
         // std::cout << it->first    // string (key)
@@ -406,90 +348,50 @@ class KapilLinearModelHashTableFile {
     return {buckets.size(), 0, nullptr, *this};
   }
 
-  /**
-   * Returns an iterator pointing to the payload for a given key
-   * or end() if no such key could be found
-   *
-   * @param key the key to search
-   */
-  
-
   forceinline int operator[](const Key& key) {
-    // lookupCall ++;
-    // std::cout << "lookup call: " << lookupCall << std::endl;
-    // obtain directory bucket
-    size_t directory_ind = model(key)%(buckets.size());
 
+    size_t directory_ind = model(key)%(buckets.size());
     auto start=directory_ind;
 
-    //  std::cout<<" key: "<<key<<std::endl;
-    //  bool exit=false;
-
-    
-    for(;directory_ind<start+50000;)
-    {
-       auto bucket = &buckets[directory_ind%buckets.size()];
-
-      // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-      // this nested loop construction anyways.
-      //  std::cout<<"probe rate: "<<directory_ind+1-start<<std::endl;
-       
-      for (size_t i = 0; i < BucketSize; i++)
-       {
-          const auto& current_key = bucket->keys[i];
-          // std::cout<<current_key<<" match "<<key<<std::endl;
-          if (current_key == Sentinel) {
-            return 0;
-          }
-          if (current_key == key) {
-            Payload pos = bucket->payloads[i];
-            //std::vector<char> buff_(blockSize);
-            std::lock_guard g(locks[(numLock ++) % 8192]);
-            //std::cout << "This offset would be pos times bz: " << pos <<" x " << blockSize << std::endl;
-            //disktime ++;
-            //std::cout << "read bytes " << nread << " from pread(): " << std::endl;
-            //std::cout << "read disk: " << disktime << std::endl;
-            return 1;
-          }
+    for(; directory_ind<start+50000; ) {
+      auto bucket = &buckets[directory_ind % buckets.size()];
+      for (size_t i = 0; i < BucketSize; i++) {
+      const auto& current_key = bucket->keys[i];
+      const auto& current_pos = bucket->payloads[i];
+        if (current_key == Sentinel) {
+          return 0;
+        } else if (current_key == key) {
+          return 1;
         }
-
+      }
       directory_ind++;
-      
     }
-
-   return 0;
-
-    // return end();
+    return 0;
+    
   }
 
-  int lookUp(const Key& key, Payload &value) {
+  int lookUp(const Key& key, std::vector<char> &value) {
     
     size_t directory_ind = model(key)%(buckets.size());
-    auto start=directory_ind;
-
-    for(;directory_ind<start+50000;)
-    {
-       auto bucket = &buckets[directory_ind%buckets.size()];
-
-      // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-      // this nested loop construction anyways.
-      //  std::cout<<"probe rate: "<<directory_ind+1-start<<std::endl;
-       
-      for (size_t i = 0; i < BucketSize; i++)
-       {
-          const auto& current_key = bucket->keys[i];
-          // std::cout<<current_key<<" match "<<key<<std::endl;
-          if (current_key == Sentinel) {
-            return 0;
-          }
-          if (current_key == key) {
-            value = bucket->payloads[i];
-            return 1;
-          }
+    auto start = directory_ind;
+    for(;directory_ind<start+50000;) {
+    //for(;directory_ind<start;) {
+      auto bucket = &buckets[directory_ind % buckets.size()];
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        const auto& current_pos = bucket->payloads[i];
+        //stoc->stocRead(current_pos, value);
+        if (current_key == Sentinel) {
+          return 0;
+        } else if (current_key == key) {
+          // disktime ++;
+          // std::cout << "Disk time: " << disktime << std::endl;
+          return 1;
         }
+      }
       directory_ind++; 
     }
-   return 0;
+    return 0;
   }
 
   std::string name() {
