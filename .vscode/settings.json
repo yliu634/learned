@@ -77,6 +77,7 @@
         "valarray": "cpp",
         "variant": "cpp",
         "cassert": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "*.ipp": "cpp"
     }
 }

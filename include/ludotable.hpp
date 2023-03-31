@@ -175,7 +175,6 @@ public:
   
   virtual void setSeed(uint32_t s) {
     LudoCommon<K, V, VL>::setSeed(s);
-    
     locator.hab.setSeed(rand() | (uint64_t(rand()) << 32));
     locator.hd.setSeed(rand());
   }
@@ -194,14 +193,14 @@ public:
               capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
       num_buckets_ <<= 1U;
     
-      buckets_.resize(num_buckets_, empty_bucket);
-      locator.resizeCapacity(toInsert);
-      // till this line, an empty ludo is ready
-      if (toInsert) { // the oldMap should be initialized
-        for (int i = 0; i < toInsert; ++i) {
-          insert(kv[i].first, kv[i].second, false);
-        }
-      } 
+    buckets_.resize(num_buckets_, empty_bucket);
+    locator.resizeCapacity(toInsert);
+    // till this line, an empty ludo is ready
+    if (toInsert) { // the oldMap should be initialized
+      for (int i = 0; i < toInsert; ++i) {
+        insert(kv[i].first, kv[i].second, false);
+      }
+    } 
   }
   
   LudoTable(const vector<K> &kv, 
@@ -212,16 +211,18 @@ public:
     num_buckets_ = 64U;
     
     for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; 
-              capacity < capacity_; 
+              capacity <= capacity_; 
               capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
       num_buckets_ <<= 1U;
-      buckets_.resize(num_buckets_, empty_bucket);
-      locator.resizeCapacity(toInsert);
-      if (toInsert) {
-        for (uint32_t i = 0; i <= kv.size(); ++i) {
-          insert(kv[i], i, false);
-        }
+
+    buckets_.resize(num_buckets_, empty_bucket);
+    locator.resizeCapacity(toInsert);
+    if (toInsert) {
+      for (uint32_t i = 0; i <= kv.size(); i ++) {
+        insert(kv[i], i, false);
       }
+    }
+
   }
 
   // The key type is fixed as a pre-hashed key for this specialized use.
@@ -383,9 +384,8 @@ public:
   // if online, the updates are to be sent to the dp. so collect the path, and do not allow blocking rebuild in both Othello and Ludo
   // else (offline), we want all the updates to be directly reflected, even when it incur further and recursive retries.
   UpdateResult insert(const K &k, V v, bool online = true) {
-    checkIntegrity();
-
-    //    v = v & ValueMask;
+    // checkIntegrity();
+    // v = v & ValueMask;
     UpdateResult result = {};
     if (isMember(k)) {
       result = changeValue(k, v);
@@ -403,7 +403,6 @@ public:
       char target_slot = -1;
       uint32_t buckets[2];
       fast_map_to_buckets(h(k), buckets, buckets_.size());
-      
       for (char i = 0; i < 2 && target_slot < 0; ++i) {
         uint32_t bi = buckets[i];
         Bucket &bucket = buckets_[bi];
@@ -413,7 +412,6 @@ public:
           } else if (target_slot == -1) {
             target_bucket = bi;
             target_slot = slot; // do not break, to go through full duplication test
-            
             break;
           }
         }
@@ -431,10 +429,20 @@ public:
       if (result.status >= 0) nKeys++;
     }
     
-    checkIntegrity();
+    //checkIntegrity();
     return result;
   }
   
+  void dumpValue(vector<V>& res, bool diskread = false) {
+    for (Bucket& bucket: buckets_) {
+      for (uint32_t slot = 0; slot < kSlotsPerBucket; slot++) {
+        if (!(bucket.occupiedMask & (1U << slot))) 
+          continue;
+        res.push_back(bucket.values[slot]);
+      }
+    }
+  }
+
   void checkIntegrity() {
     #ifdef FULL_DEBUG
     unordered_set<K> unvisited = unordered_set<K>(locator.keys.begin(), locator.keys.begin() + locator.nKeysInOthello);
@@ -452,7 +460,6 @@ public:
         
         assert(locator.isMember(k));
         assert(buckets[locator.lookUp(k)] == i);
-        
         assert(unvisited.erase(k) == 1);
       }
     }
@@ -515,14 +522,12 @@ public:
   inline bool lookUp(const K &k, V &out) const {
     uint32_t buckets[2];
     fast_map_to_buckets(h(k), buckets, buckets_.size());
-    
     for (uint32_t &b : buckets) {
       const Bucket &bucket = buckets_[b];
       if (FindInBucket(k, bucket, out)) {
         return true;
       }
     }
-    
     return false;
   }
   

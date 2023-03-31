@@ -1108,6 +1108,11 @@ size_t extractBars(std::vector<Key>& keys, std::vector<Key>& bars,
 }
 
 
+
+
+
+
+
 // ############################## MULTIPLE LUDO TABLE ##############################
 // ############################## MULTIPLE LUDO TABLE ##############################
 // ############################## MULTIPLE LUDO TABLE ##############################
@@ -1168,11 +1173,11 @@ static void PointLookupMultipleLudo(benchmark::State& state) {
   size_t i = 0;
   Payload v = 0;
   for (auto _ : state) {
-    while (unlikely(i >= probing_set.size())) i -= probing_set.size();
+    while (unlikely(i >= probing_set.size())) 
+      i -= probing_set.size();
     const Key searched = probing_set[i++];
-    
-    table->lookup(searched, v);
-    std::cout << "out is: " << v << std::endl;
+
+    table->lookup(searched, v); //point lookup
   }
 
   table->print_data_statistics();
@@ -1192,22 +1197,210 @@ static void PointLookupMultipleLudo(benchmark::State& state) {
 
 }
 
-#define KAPILBMMultipleLudo(Table)                                                         \
-  BENCHMARK_TEMPLATE(PointLookupMultipleLudo, Table, 900)                                 \
-      ->ArgsProduct({dataset_sizes, datasets, probe_distributions})                         \
+template <class Table, size_t tableCapacity>
+static void RangeQueryMultipleLudo(benchmark::State& state) {
+  const auto dataset_size = static_cast<size_t>(state.range(0));
+  const auto did = static_cast<dataset::ID>(state.range(1));
+  const auto probing_dist =
+      static_cast<dataset::ProbingDistribution>(state.range(2));
+  const auto succ_probability =
+      static_cast<size_t>(state.range(3));
+  std::string signature =
+      std::string(typeid(Table).name()) + "_" + std::to_string(tableCapacity) +
+      "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
+      dataset::name(probing_dist);
+  
+  std::vector<std::pair<Key, Payload>> data{};
+  std::vector<Key> bars{0};
+  std::vector<std::vector<Key>> dataPieces{};
+
+  if (previous_signature != signature) {
+    std::cout << "performing setup... ... ..";
+    auto start = std::chrono::steady_clock::now();
+
+    // Generate data (keys & payloads) & probing set
+    data.reserve(dataset_size);
+    {
+      auto keys = dataset::load_cached<Key>(did, dataset_size);
+
+      std::transform(
+          keys.begin(), keys.end(), std::back_inserter(data),
+          [](const Key& key) { return std::make_pair(key, key - 5); });
+      extractBars(keys, bars, dataPieces, tableCapacity);
+      probing_set = dataset::generate_probing_set(keys, probing_dist,succ_probability);
+    }
+
+    if (data.empty()) {
+      for (auto _ : state) {
+      }
+      std::cout << "failed" << std::endl;
+      return;
+    }
+
+    if (prev_table != nullptr) free_lambda();
+    prev_table = new Table(bars, dataPieces);
+    free_lambda = []() { delete ((Table*)prev_table); };
+    const auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> diff = end - start;
+    std::cout << "constructe completed" << std::setw(9) << diff.count() << " seconds" << std::endl;
+  }
+
+  assert(prev_table != nullptr);
+  Table* table = (Table*)prev_table;
+
+  previous_signature = signature;  
+
+  size_t i = 0;
+  Payload v = 0;
+  std::vector<Payload> addrScan; 
+  for (auto _ : state) {
+    while (unlikely(i >= probing_set.size())) i -= probing_set.size();
+    const Key searched = probing_set[i++];
+    
+    table->pieceScan(searched, addrScan); //range query no disk
+    //table->pieceScanTest(searched, addrScan);
+  }
+
+  table->print_data_statistics();
+
+  if (false) {
+    state.counters["table_bytes"] = table->byte_size();
+    state.counters["table_directory_bytes"] = table->directory_byte_size();
+    state.counters["table_bits_per_key"] = 8. * table->byte_size() / dataset_size;
+    state.counters["data_elem_count"] = dataset_size;
+
+    std::stringstream ss;
+    ss << succ_probability;
+    std::string temp = ss.str();
+    state.SetLabel(table->name() + ":" + dataset::name(did) + ":" +
+                    dataset::name(probing_dist)+":"+temp);
+  }
+
+}
+
+template <class Table, size_t tableCapacity>
+static void RangeQueryMultipleLudoFile(benchmark::State& state) {
+  const auto dataset_size = static_cast<size_t>(state.range(0));
+  const auto did = static_cast<dataset::ID>(state.range(1));
+  const auto probing_dist =
+      static_cast<dataset::ProbingDistribution>(state.range(2));
+  const auto succ_probability =
+      static_cast<size_t>(state.range(3));
+  std::string signature =
+      std::string(typeid(Table).name()) + "_" + std::to_string(tableCapacity) +
+      "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
+      dataset::name(probing_dist);
+  
+  uint32_t blockSize(512);
+  std::string filepath = "../datasets/oneFile.txt";
+  filestore::Storage stoc(filepath, dataset_size, blockSize); //filename & ds_size, blocksize could be ignored.
+
+  std::vector<std::pair<Key, Payload>> data{};
+  std::vector<Key> bars{0};
+  std::vector<std::vector<Key>> dataPieces{};
+
+  if (previous_signature != signature) {
+    std::cout << "performing setup... ... ..";
+    auto start = std::chrono::steady_clock::now();
+
+    // Generate data (keys & payloads) & probing set
+    data.reserve(dataset_size);
+    {
+      auto keys = dataset::load_cached<Key>(did, dataset_size);
+
+      std::transform(
+          keys.begin(), keys.end(), std::back_inserter(data),
+          [](const Key& key) { return std::make_pair(key, key - 5); });
+      extractBars(keys, bars, dataPieces, tableCapacity);
+      probing_set = dataset::generate_probing_set(keys, probing_dist,succ_probability);
+    }
+
+    if (data.empty()) {
+      for (auto _ : state) {
+      }
+      std::cout << "failed" << std::endl;
+      return;
+    }
+
+    if (prev_table != nullptr) free_lambda();
+    prev_table = new Table(bars, dataPieces);
+    free_lambda = []() { delete ((Table*)prev_table); };
+    const auto end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> diff = end - start;
+    std::cout << "constructe completed" << std::setw(9) << diff.count() << " seconds" << std::endl;
+  }
+
+  assert(prev_table != nullptr);
+  Table* table = (Table*)prev_table;
+
+  previous_signature = signature;  
+
+  size_t i = 0;
+  Payload v = 0;
+  vector<char> value(blockSize);
+  std::vector<Payload> addrScan; 
+  for (auto _ : state) {
+    while (unlikely(i >= probing_set.size())) i -= probing_set.size();
+    const Key searched = probing_set[i++];
+    
+    table->pieceScan(searched, addrScan);
+    //std::cout << "size is " << addrScan.size() << std::endl; // 900 //single table
+    for (auto& addr: addrScan) {
+      stoc.stocRead(addr, value);
+    }
+    addrScan.clear();
+    //benchmark::DoNotOptimize();
+  }
+
+  table->print_data_statistics();
+
+  if (false) {
+    state.counters["table_bytes"] = table->byte_size();
+    state.counters["table_directory_bytes"] = table->directory_byte_size();
+    state.counters["table_bits_per_key"] = 8. * table->byte_size() / dataset_size;
+    state.counters["data_elem_count"] = dataset_size;
+
+    std::stringstream ss;
+    ss << succ_probability;
+    std::string temp = ss.str();
+    state.SetLabel(table->name() + ":" + dataset::name(did) + ":" +
+                    dataset::name(probing_dist)+":"+temp);
+  }
+
+}
+
+
+#define KAPILBMMultipleLudo(Table)                                                       \
+  BENCHMARK_TEMPLATE(PointLookupMultipleLudo, Table, 900)                                \
+      ->ArgsProduct({dataset_sizes, datasets, probe_distributions})                       \
       ->Iterations(20);
 
-#define BenchmarKapilMultipleLudo()                                                         \
-  using KapilMultiLudoTable = MultiLudoTable<Key, Payload>;                                  \
+#define KAPILBMRangeQueryMultipleLudo(Table)                                              \
+  BENCHMARK_TEMPLATE(RangeQueryMultipleLudo, Table, 900)                                 \
+      ->ArgsProduct({dataset_sizes, datasets, probe_distributions})                       \
+      ->Iterations(200000);
+
+#define KAPILBMRangeQueryMultipleLudoFile(Table)                                              \
+  BENCHMARK_TEMPLATE(RangeQueryMultipleLudoFile, Table, 900)                                 \
+      ->ArgsProduct({dataset_sizes, datasets, probe_distributions})                       \
+      ->Iterations(20);
+
+
+#define BenchmarKapilMultipleLudo()                                                       \
+  using KapilMultiLudoTable = MultiLudoTable<Key, Payload>;                              \
   KAPILBMMultipleLudo(KapilMultiLudoTable);
 
+#define BenchmarKapilRangeQueryMultipleLudo()                                         \
+  using KapilRangeQueryMultiLudoTable = MultiLudoTable<Key, Payload>;                     \
+  KAPILBMRangeQueryMultipleLudo(KapilRangeQueryMultiLudoTable);
+
+#define BenchmarKapilRangeQueryMultipleLudoFile()                                         \
+  using KapilRangeQueryMultiLudoTableFile = MultiLudoTable<Key, Payload>;                     \
+  KAPILBMRangeQueryMultipleLudoFile(KapilRangeQueryMultiLudoTableFile);
 
 // ############################ END MULTIPLE LUDO TABLE ##########################
 
 
 
-
-
-
-
 }  // namespace _
+

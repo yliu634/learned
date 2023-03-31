@@ -37,6 +37,8 @@ using KickingStrat = kapilmodelhashtable::KapilModelBiasedKicking<0>;
 //BenchmarKapilCuckooModelFile(4,200, RMIHash, KickingStrat);
 
 BenchmarKapilMultipleLudo();
+BenchmarKapilRangeQueryMultipleLudo();
+//BenchmarKapilRangeQueryMultipleLudoFile();
 
 
 

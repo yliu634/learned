@@ -13,16 +13,16 @@ namespace filestore {
 template<class Bar, int BL = sizeof(Bar) * 8>
 class CompactTree {
   public:
-    CompactTree() {
-        root = new TrieNode{std::string(""), nullptr, nullptr};
-        root->left = new TrieNode{std::string(BL-1, '0'), nullptr, nullptr};
-        root->right = new TrieNode{std::string(BL-1, '1'), nullptr, nullptr};
+    CompactTree(): nodesNum(0) {
+        root = new TrieNode{std::string(""), -1, -1, nullptr, nullptr};
+        root->left = new TrieNode{std::string(BL-1, '0'), -1, -1, nullptr, nullptr};
+        root->right = new TrieNode{std::string(BL-1, '1'), -1, -1, nullptr, nullptr};
     }
     
-    explicit CompactTree(std::vector<Bar> bars) {
-        root = new TrieNode{std::string(""), nullptr, nullptr};
-        root->left = new TrieNode{std::string(BL-1, '0'), nullptr, nullptr};
-        root->right = new TrieNode{std::string(BL-1, '1'), nullptr, nullptr};
+    explicit CompactTree(std::vector<Bar> bars): nodesNum(0) {
+        root = new TrieNode{std::string(""), -1, -1, nullptr, nullptr};
+        root->left = new TrieNode{std::string(BL-1, '0'), -1, -1, nullptr, nullptr};
+        root->right = new TrieNode{std::string(BL-1, '1'), -1, -1, nullptr, nullptr};
         sort(bars.begin(), bars.end());
         for(uint32_t i = 0; i < bars.size(); i++) {
             int ret = insert(bars[i]);
@@ -31,14 +31,19 @@ class CompactTree {
                 break;
             }
         }
+        treeTraversal(root);
+        treeNodesNum(root);
+        std::cout << "There are total nodes size: " << nodesNum << std::endl;
     }
 
     struct TrieNode {
         std::string str;
+        int32_t leftbar;
+        int32_t rightbar;
         TrieNode* left;
         TrieNode* right;
     };
-
+    
     int insert(Bar key) {
         std::bitset<BL> bits(key); 
         std::string bitstr = bits.to_string();
@@ -55,14 +60,14 @@ class CompactTree {
                 auto res = std::mismatch(bitpiece.begin(), bitpiece.end(), head->str.begin());
                 int pos = std::distance(bitpiece.begin(), res.first);
                 shift += pos;
-                TrieNode* branch = new TrieNode{head->str.substr(0, pos), nullptr, nullptr};
+                TrieNode* branch = new TrieNode{head->str.substr(0, pos), -1, -1, nullptr, nullptr};
                 if (bitpiece[pos] == '0') {
-                    branch->left = new TrieNode{bitstr.substr(shift+1), nullptr, nullptr};
+                    branch->left = new TrieNode{bitstr.substr(shift+1), -1, -1, nullptr, nullptr};
                     branch->right = head;
                     if (leftchild) parent->left = branch;
                     else parent->right = branch;
                 } else {
-                    branch->right = new TrieNode{bitstr.substr(shift+1), nullptr, nullptr};
+                    branch->right = new TrieNode{bitstr.substr(shift+1), -1, -1, nullptr, nullptr};
                     branch->left = head;
                     if (leftchild) parent->left = branch;
                     else parent->right = branch;
@@ -82,128 +87,24 @@ class CompactTree {
         return 0;
     }
 
-    int lookup(Bar key) {
-        std::bitset<BL> bits(key); 
-        std::string bitstr = bits.to_string();
-        std::string readbar = "";
-        TrieNode* head = root;
-        bool left = false;
-        int shift = 0;
-        while (head != nullptr) {
-            if (head->str != "") {
-                if (bitstr.substr(shift, head->str.length()) != head->str) {
-                    left = (bitstr.substr(shift, head->str.length()) > head->str)? false:true;
-                    break;
-                }
-                readbar += head->str;
-                shift += head->str.length();
-            }
-            head = bitstr[shift] == '0'? head->left: head->right;
-            readbar += bitstr[shift];
-            shift ++;
-        }
-        //TODO:
-        if (shift < BL) {
-            if (left) {
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->left != nullptr) {
-                        head = head->left;
-                        readbar += '0';
-                    } else {
-                        head = head->right;
-                        readbar += '1';
-                    }
-                } 
-            } else {
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->right != nullptr) {
-                        head = head->right;
-                        readbar += '1';
-                    } else {
-                        head = head->left;
-                        readbar += '0';
-                    }
-                }
-            }
-        }
-        readbar.pop_back();
-        bits = std::bitset<BL>(readbar);
-        return bits.to_ulong();
-    }
-
-    int lookup(Bar key, std::string& out) {
-        std::bitset<BL> bits(key); 
-        std::string bitstr = bits.to_string();
-        std::string readbar = "";
-        TrieNode* head = root;
-        bool left = false;
-        int shift = 0;
-        while (head != nullptr) {
-            if (head->str != "") {
-                if (bitstr.substr(shift, head->str.length()) != head->str) {
-                    left = (bitstr.substr(shift, head->str.length()) > head->str)? false:true;
-                    break;
-                }
-                readbar += head->str;
-                shift += head->str.length();
-            }
-            head = bitstr[shift] == '0'? head->left: head->right;
-            readbar += bitstr[shift];
-            shift ++;
-        }
-        //TODO:
-        if (shift < BL) {
-            if (left) {
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->left != nullptr) {
-                        head = head->left;
-                        readbar += '0';
-                        continue;
-                    } 
-                    head = head->right;
-                    readbar += '1';
-                } 
-            } else {
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->right != nullptr) {
-                        head = head->right;
-                        readbar += '1';
-                        continue;
-                    }
-                    head = head->left;
-                    readbar += '0';
-                }
-            }
-        }
-        readbar.pop_back();
-        out = std::bitset<BL>(readbar).to_string();
-        if (left) return 1; //left one pos
-        else return 0;
-    }
-
-    int lookup(Bar key, Bar& out) {
+    int32_t lookUp(Bar key) {
         std::bitset<BL> bits(key);
         std::string bitstr = bits.to_string();
         std::string readbar = "";
         TrieNode* parent = root;
         TrieNode* head = root;
-        int howtoleave = 2; //0:left, 1:right, 2:none
         int shift = 0;
-        //head = bitstr[shift] == '0'? head->left: head->right;
-        //readbar += bitstr[shift++];
         while (head != nullptr) {
             if (head->str != "") {
                 if (bitstr.substr(shift, head->str.length()) != head->str) {
-                    howtoleave = (bitstr.substr(shift, head->str.length()) > head->str)? 1:0;
-                    break;
-                } else {
-                    readbar += head->str;
-                    shift += head->str.length();
+                    if (bitstr.substr(shift, head->str.length()) > head->str) {
+                        return head->rightbar;
+                    } else {
+                        return head->leftbar;
+                    }
                 }
+                readbar += head->str;
+                shift += head->str.length();
             }
             parent = head;
             head = bitstr[shift] == '0'? head->left: head->right;
@@ -211,122 +112,41 @@ class CompactTree {
             shift ++;
         }
 
-        if (shift < BL) {
-            if (howtoleave >= 2) {
-                if (parent->left) {
-                    head = parent->left;
-                    howtoleave = 1; //right
-                } else {
-                    head = parent->right;
-                    howtoleave = 0; //right
-                }
-            }
-            switch(howtoleave) {
-            case 0:
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->left != nullptr) {
-                        head = head->left;
-                        readbar += '0';
-                        continue;
-                    }
-                    head = head->right;
-                    readbar += '1';
-                }
-                break;
-            case 1:
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->right != nullptr) {
-                        head = head->right;
-                        readbar += '1';
-                        continue;
-                    }
-                    head = head->left;
-                    readbar += '0';
-                }
-                break;
-            }
-        }
-
-        /*while (head != nullptr) {
-            readbar += head->str;
-            std::cout << readbar << std::endl;
-            if (head->right != nullptr) {
-                head = head->right;
-                readbar += '1';
-                continue;
-            }
-            readbar += '0';
-            head = head->left; 
-        }
-
-        if (shift < BL && head != nullptr) {
-            if (left) {
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->left != nullptr) {
-                        head = head->left;
-                        readbar += '0';
-                        continue;
-                    } 
-                    head = head->right;
-                    readbar += '1';
-                } 
-            } else {
-                while (head != nullptr) {
-                    readbar += head->str;
-                    if (head->right != nullptr) {
-                        head = head->right;
-                        readbar += '1';
-                        continue;
-                    }
-                    head = head->left;
-                    readbar += '0';
-                }
-            }
-        } else if (shift < BL && head == nullptr) {
-
-        }*/
-
-        readbar.pop_back();
-        std::cout << "key is: " << bitstr << std::endl;
-        std::cout << "readerbar is: " << readbar << std::endl;
-        out = std::bitset<BL>(readbar).to_ullong();
-        //std::cout << "lookup out is: " << out << std::endl;
-        if (howtoleave <= 0) 
-            return 1;                                           //left one pos
-        else 
-            return 0;
+        return parent->rightbar;
     }
 
     int remove(Bar key) {
         return 0;
     }
 
-    std::pair<Bar, Bar> scanPiece(Bar low_bound, Bar high_bound) {
-        return std::make_pair(lookup(low_bound), lookup(high_bound));
+    std::pair<Bar, Bar> scan(Bar low_key, Bar high_key) {
+        return {-1, -1};
     }
 
-    int scanPieceStr(Bar low_bound, Bar high_bound, 
-                     std::string& p1, std::string& p2, std::bitset<2>& bits) {
-        bits[0] = lookup(low_bound, p1);
-        bits[1] = lookup(high_bound, p2);
-        return 0;
+    int32_t piece = -1;
+    void treeTraversal(TrieNode* head) {
+        if (!head) return;
+        head->leftbar = piece;
+        if (head->left) 
+            treeTraversal(head->left);
+        if (!head->left && !head->right) 
+            piece ++;
+        if (head->right)
+            treeTraversal(head->right);
+        head->rightbar = piece;
     }
 
-    void prefixCut(TrieNode* head, int pos) {
-        std::queue<TrieNode*> q;
-        q.push(head);
-        while(!q.empty()) {
-            auto qtmp = q.front();
-            q.pop();
-            qtmp->str = qtmp->str.substr(pos+1);
-            if (qtmp->left)
-                q.push(qtmp->left);
-            if (qtmp->right)
-                q.push(qtmp->right);  
-        }
+    void treeNodesNum(TrieNode* head) {
+        if (!head) return;
+        if (head->left) 
+            treeNodesNum(head->left);
+        if (head->right)
+            treeNodesNum(head->right);
+        nodesNum ++;
+    }
+
+    uint32_t statNodes() {
+        return nodesNum;
     }
 
     void printTree() {
@@ -354,6 +174,8 @@ class CompactTree {
 
   private:
     TrieNode* root;
+    uint32_t nodesNum;
+    
 
 };
 }
