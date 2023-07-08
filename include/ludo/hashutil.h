@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <cstdint>
 #include <sys/types.h>
 
 #include <string>
@@ -33,6 +34,8 @@ class HashUtil {
 
   // Null hash (shift and mask)
   static uint32_t NullHash(const void *buf, size_t length, uint32_t shiftbytes);
+
+  static uint8_t Crc8(const void *buf, size_t length, uint8_t seed);
 
   // Wrappers for MD5 and SHA1 hashing using EVP
   //static std::string MD5Hash(const char *inbuf, size_t in_length);

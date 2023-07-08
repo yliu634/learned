@@ -67,12 +67,12 @@ class KapilLinearHashTable {
     }
   };
 
-  /// directory of buckets
+  // directory of buckets
   std::vector<Bucket> buckets;
   bool disablelogging  = true;
 
-  /// model for predicting the correct index
-//   Model model;
+  // model for predicting the correct index
+  //   Model model;
 
   /// allocator for buckets
   std::unique_ptr<support::Tape<Bucket>> tape;

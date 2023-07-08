@@ -1,5 +1,6 @@
 // Pulled from lookup3.c by Bob Jenkins
 #include "hashutil.h"
+#include <iostream>
 #include <openssl/evp.h>
 #include <random>
 
@@ -710,6 +711,35 @@ uint32_t HashUtil::NullHash(const void *buf, size_t length,
           (data[(length - shiftbytes - 2)] << 8) +
           (data[(length - shiftbytes - 1)]));
 }
+
+
+static const uint8_t crc8_table[] = {
+  0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15,
+  0x38, 0x3F, 0x36, 0x31, 0x24, 0x23, 0x2A, 0x2D,
+  0x70, 0x77, 0x7E, 0x79, 0x6C, 0x6B, 0x62, 0x65,
+  0x48, 0x4F, 0x46, 0x41, 0x54, 0x53, 0x5A, 0x5D,
+  0xE0, 0xE7, 0xEE, 0xE9, 0xFC, 0xFB, 0xF2, 0xF5,
+  0xD8, 0xDF, 0xD6, 0xD1, 0xC4, 0xC3, 0xCA, 0xCD,
+  0x90, 0x97, 0x9E, 0x99, 0x8C, 0x8B, 0x82, 0x85,
+  0xA8, 0xAF, 0xA6, 0xA1, 0xB4, 0xB3, 0xBA, 0xBD,
+};
+
+// CRC-8 computation
+uint8_t HashUtil::Crc8(const void *buf, size_t len, uint8_t seed)
+{
+    const char *data = (const char *)buf;
+    std::cout << "seed is: " << (unsigned int)seed << std::endl;
+    uint8_t crc = seed & 0xff;
+    for (size_t i = 0; i < len; ++i) {
+      std::cout << "data[i]: " << (unsigned int) (unsigned char)data[i] << std::endl;
+      crc = crc8_table[crc ^ data[i]];
+    }
+    //crc >>= 3;
+    //crc *= seed;
+    std::cout << "crc result: " << (unsigned int) (unsigned char)(crc >> 6) << std::endl;
+    return crc;
+}
+
 
 /*
  * Compatibility layer for OpenSSL < 1.1.0.

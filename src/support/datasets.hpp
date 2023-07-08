@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ycsbc/core_workload.h"
+#include "ycsbc/utils.h"
 #include "include/convenience/builtins.hpp"
 
 namespace dataset {
@@ -26,7 +28,7 @@ static void deduplicate_and_sort(std::vector<T>& vec) {
  * @return a sorted and deduplicated list of all members of the dataset
  */
 template <class Key>
-std::vector<Key> load(const std::string& filepath) {
+std::vector<Key> load(const std::string& filepath, const uint64_t number_key = 50000000) {
   std::cout << "loading dataset " << filepath << std::endl;
 
   // parsing helper functions
@@ -57,7 +59,7 @@ std::vector<Key> load(const std::string& filepath) {
   }
 
   const auto max_num_elements = (size - sizeof(std::uint64_t)) / sizeof(Key);
-  std::vector<uint64_t> dataset(max_num_elements, 0);
+  std::vector<uint64_t> dataset(number_key, 0);
   {
     std::vector<unsigned char> buffer(size);
     if (!input.read(reinterpret_cast<char*>(buffer.data()), size))
@@ -65,8 +67,8 @@ std::vector<Key> load(const std::string& filepath) {
 
     // Parse file
     uint64_t num_elements = read_little_endian_8(buffer, 0);
-    num_elements = 2000000;
-    assert(num_elements <= max_num_elements);
+    num_elements = number_key;
+    //assert(num_elements <= max_num_elements);
     switch (sizeof(Key)) {
       case sizeof(std::uint64_t):
         for (uint64_t i = 0; i < num_elements; i++) {
@@ -88,12 +90,36 @@ std::vector<Key> load(const std::string& filepath) {
             std::to_string(sizeof(Key)));
     }
   }
-
+  //std::cerr << "dataset's size: " << dataset.size() << std::endl;
   // remove duplicates from dataset and put it into random order
   deduplicate_and_sort(dataset);
+  //std::cerr << "dataset's size again: " << dataset.size() << std::endl;
 
   return dataset;
 }
+
+template <class Key>
+void loadycsb(const std::string filepath, 
+              std::vector<Key>& ds_ycsb, size_t datasize = 100000) {
+  ds_ycsb.clear();
+  utils::Properties props;
+  ifstream input(filepath);
+  try {
+    props.Load(input);
+  } catch (const string &message) {
+    cout << message << endl;
+    exit(0);
+  }
+  input.close();
+  props.SetProperty("recordcount", std::to_string(datasize));
+  ycsbc::CoreWorkload wl;
+  wl.Init(props);
+  for (size_t i = 0; i < datasize; i++) {
+    std::string strkey = wl.NextSequenceKey().substr(4, 16);
+    ds_ycsb.push_back(std::stoull(strkey));
+  }
+}
+
 
 enum class ID {
   SEQUENTIAL = 0,
@@ -106,7 +132,14 @@ enum class ID {
   Variance_2=7,
   Variance_4=8,
   Variance_half=9,
-  Variance_quarter=10
+  Variance_quarter=10,
+  YCSB_A=11,
+  YCSB_B=12,
+  YCSB_C=13,
+  YCSB_D=14,
+  YCSB_E=15,
+  YCSB_F=16,
+  BOOK=17
 };
 
 inline std::string name(ID id) {
@@ -125,6 +158,8 @@ inline std::string name(ID id) {
       return "osm";
     case ID::WIKI:
       return "wiki";
+    case ID::BOOK:
+      return "book";
     case ID::Variance_2:
       return "Variance_2";
     case ID::Variance_4:
@@ -132,7 +167,19 @@ inline std::string name(ID id) {
     case ID::Variance_half:
       return "Variance_half";
     case ID::Variance_quarter:
-      return "Variance_quarter";    
+      return "Variance_quarter";
+    case ID::YCSB_A:
+      return "YCSB-A";
+    case ID::YCSB_B:
+      return "YCSB-B"; 
+    case ID::YCSB_C:
+      return "YCSB-C"; 
+    case ID::YCSB_D:
+      return "YCSB-D"; 
+    case ID::YCSB_E:
+      return "YCSB-E"; 
+    case ID::YCSB_F:
+      return "YCSB-F";   
   }
   return "unnamed";
 };
@@ -149,14 +196,14 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
       datasets;
 
   // cache sosd dataset files to avoid expensive load operations
-  static std::vector<Data> ds_fb, ds_osm, ds_wiki;
+  static std::vector<Data> ds_fb, ds_osm, ds_wiki, ds_ycsb, ds_book;
 
   // return cached (if available)
-  const auto id_it = datasets.find(id);
-  if (id_it != datasets.end()) {
-    const auto ds_it = id_it->second.find(dataset_size);
-    if (ds_it != id_it->second.end()) return ds_it->second;
-  }
+  //const auto id_it = datasets.find(id);
+  //if (id_it != datasets.end()) {
+  //  const auto ds_it = id_it->second.find(dataset_size);
+  //  if (ds_it != id_it->second.end()) return ds_it->second;
+  //}
 
   // generate (or random sample) in appropriate size
   std::vector<Data> ds(dataset_size, 0);
@@ -165,6 +212,7 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
       for (size_t i = 0; i < ds.size(); i++) ds[i] = i*10 + 20000;
       break;
     }
+    
     case ID::GAPPED_10: {
       std::uniform_int_distribution<size_t> dist(0, 99999);
       for (size_t i = 0, num = 0; i < ds.size(); i++) {
@@ -174,11 +222,13 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
       }
       break;
     }
+    
     case ID::UNIFORM: {
       std::uniform_int_distribution<Data> dist(0, std::pow(2, 40));
       for (size_t i = 0; i < ds.size(); i++) ds[i] = dist(rng);
       break;
     }
+    
     case ID::Variance_2: {
       std::uniform_int_distribution<Data> dist(0, std::pow(2, 40));
       for (size_t i = 0; i < ds.size(); i++) ds[i] = dist(rng);
@@ -308,92 +358,132 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
       }
       break;
     }
+    
     case ID::FB: {
+      ds_fb.clear();
       if (ds_fb.empty()) {
-        ds_fb = load<Data>(datasets_path+"fb_200M_uint64");
+        ds_fb = load<Data>(datasets_path+"fb_200M_uint64", dataset_size+100);
         std::shuffle(ds_fb.begin(), ds_fb.end(),rng);
       }
       // ds file does not exist
-      if (ds_fb.empty()) return {};
+      if (ds_fb.empty()) {
+        throw std::runtime_error("empty for fb datasets.");
+        return {};
+      }
       size_t j=0;
       size_t i = 0;
 
-      // for(int itr=1;itr<ds_fb.size();)
-      // {
-      //   std::cout<<" itr: "<<itr<<" fb val: "<<log2(ds_fb[itr]-ds_fb[itr-1])<<std::endl;
-      //   itr+=10000000;
-      // }
+      /*for(int itr=1;itr<200;itr++) {
+         std::cout<<" itr: "<<itr<<" fb val: "<<log2(ds_fb[itr]-ds_fb[itr-1])<<std::endl;
+         std::cout<<" itr: "<<itr<<" fb val: "<<ds_fb[itr]<<std::endl;
+      }*/
 
 
       // sampling this way is only valid since ds_fb is shuffled!
       for (; j < ds_fb.size() && i < ds.size(); j++)
       {
-        if(log2(ds_fb[j])<35.01 || log2(ds_fb[j])>35.99)
-        {
-          continue;
-        }
-        ds[i] = ds_fb[j]-pow(2,35);
+        //if(log2(ds_fb[j])<35.01 || log2(ds_fb[j])>35.99)
+        //if(log2(ds_fb[j])<35.01 && log2(ds_fb[j])> 0 )
+        //{
+        //  continue;
+        //}
+        if(ds_fb[j] > 0)
+          ds[i] = ds_fb[j];//-pow(2,35);
 
         i++;
       }
 
-      // std::cout<<" j is: "<<j<<" i is: "<<i<<std::endl;
+      //std::cout<<" j is: "<<j<<" i is: "<<i<<std::endl;
+      if (i < ds.size()) {
+        throw std::runtime_error("not enough i for fb datasets.");
+      }
       break;
     }
+    
     case ID::OSM: {
       if (ds_osm.empty()) {
-        ds_osm = load<Data>(datasets_path+"osm_cellids_200M_uint64");
+        ds_osm = load<Data>(datasets_path+"osm_cellids_200M_uint64", dataset_size);
         std::shuffle(ds_osm.begin(), ds_osm.end(),rng);
       }
-
-
-      // for(int itr=1;itr<ds_osm.size();)
-      // {
-      //   std::cout<<" itr: "<<itr<<" osm val: "<<log2(ds_osm[itr]-ds_osm[itr-1])<<std::endl;
-      //   itr+=10000000;
-      // }
-      // ds file does not exist
+      std::cerr << "Load data finished" << std::endl;
       if (ds_osm.empty()) return {};
        size_t j=0;
        size_t i = 0;
-      // sampling this way is only valid since ds_osm is shuffled!
       for (; j < ds_osm.size() && i < ds.size(); j++)
         {
-          if(log2(ds_osm[j])<62.01 || log2(ds_osm[j])>62.99)
-          {
-            continue;
-          }
-          ds[i] = ds_osm[j]-pow(2,62);
+          //if(log2(ds_osm[j])<62.01 || log2(ds_osm[j])>62.99)
+          //{
+          //  continue;
+          //}
+          ds[i] = ds_osm[j];//-pow(2,62);
           i++;
         }
 
         // std::cout<<" j is: "<<j<<" i is: "<<i<<std::endl;
       break;
     }
+    
     case ID::WIKI: {
       if (ds_wiki.empty()) {
-        ds_wiki = load<Data>(datasets_path+"wiki_ts_200M_uint64");
+        ds_wiki = load<Data>(datasets_path+"wiki_ts_200M_uint64", dataset_size);
         std::shuffle(ds_wiki.begin(), ds_wiki.end(),rng);
       }
       std::cerr << "Load data finished" << std::endl;
-      
+      std::cerr << "wiki number is: " << ds_wiki.size() << std::endl;
       if (ds_wiki.empty()) return {};
-       size_t j=0;
+       size_t j = 0;
        size_t i = 0;
       // sampling this way is only valid since ds_wiki is shuffled!
       for (; j < ds_wiki.size() && i < ds.size(); j++)
       {
-        // if(ds_wiki[j]>std::pow(2,30))
-        // {
-        //   continue;
-        // }
         ds[i] = ds_wiki[j];
         i++;
-      }  
-
-      // std::cout<<" j is: "<<j<<" i is: "<<i<<std::endl;
+      }
+      /*if (i < ds.size()) {
+        throw std::runtime_error("not enough i for fb datasets.");
+      }*/
       break;
     }
+    
+    case ID::BOOK: {
+      if (ds_book.empty()) {
+        ds_book = load<Data>(datasets_path+"books_200M_uint64", dataset_size);
+        std::shuffle(ds_book.begin(), ds_book.end(),rng);
+      }
+      std::cerr << "Load book data finished" << std::endl;
+      
+      if (ds_book.empty()) return {};
+       size_t j = 0;
+       size_t i = 0;
+      // sampling this way is only valid since ds_wiki is shuffled!
+      for (; j < ds_book.size() && i < ds.size(); j++)
+      {
+        ds[i] = ds_book[j];
+        i++;
+      }
+      /*if (i < ds.size()) {
+        throw std::runtime_error("not enough i for fb datasets.");
+      }*/
+      break;
+    }
+
+    case ID::YCSB_C: {
+      if (ds_ycsb.empty()) {
+        loadycsb<Data>("../ycsbc/workloads/workloadc.spec", ds_ycsb, dataset_size);
+      }
+      if (ds_ycsb.size() < dataset_size)
+        throw::std::runtime_error("ycsb doesn't get enough data");
+      std::cerr << "Load ycsbc data finished" << std::endl;
+      size_t i(0), j(0);
+      for (; j < ds_ycsb.size() && i < ds.size(); j++) {
+        ds[i] = ds_ycsb[j];
+        // if (i % 5000 == 0)
+        // std::cout << "kkkk:" << ds[i] << std::endl;
+        i++;
+      }
+      break;
+    }
+    
     default:
       throw std::runtime_error(
           "invalid datastet id " +
@@ -408,17 +498,7 @@ std::vector<Data> load_cached(ID id, size_t dataset_size) {
 
   // deduplicate, sort before caching to avoid additional work in the future
   deduplicate_and_sort(ds);
-
-  // cache dataset for future use
-  const auto it = datasets.find(id);
-  if (it == datasets.end()) {
-    std::unordered_map<size_t, std::vector<Data>> map;
-    map.insert({dataset_size, ds});
-    datasets.insert({id, map});
-  } else {
-    it->second.insert({dataset_size, ds});
-  }
-
+  
   return ds;
 }
 };  // namespace dataset

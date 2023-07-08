@@ -242,15 +242,11 @@ class KapilChainedModelHashTableFile {
 
     // std::cout<<"index: "<<index<<" curr val: "<<key_vec[index]<<std::endl;
 
-    if(key_vec[index]<low_key)
-    {
-      while(key_vec[index]<low_key)
-      {
+    if(key_vec[index]<low_key) {
+      while(key_vec[index]<low_key) {
         index+=2;
       }
-    }
-    else
-    {
+    } else {
       while(key_vec[index-2]>low_key)
       {
         index-=2;
@@ -332,8 +328,7 @@ class KapilChainedModelHashTableFile {
             {
                 const auto& current_key = bucket->keys[i];
                 if (current_key == Sentinel) break;
-                if (current_key >= low_key && current_key <= high_key) 
-                {
+                if (current_key >= low_key && current_key <= high_key) {
                   ans+=bucket->payloads[0];
                   // std::cout<<"bucket count: "<<bucket_count<<std::endl;
                   // return {directory_ind, i, bucket, *this};
@@ -591,12 +586,9 @@ class KapilChainedModelHashTableFile {
       directory_ind++;
     }
     return 0;
-
   }
 
-  forceinline int lookUp(const Key& key, std::vector<char>& value) {
-    // assert(key != Sentinel);
-    // obtain directory bucket
+  int lookUp(const Key& key, std::vector<char>& value) {
     size_t directory_ind = model(key)%(buckets.size());
     int exit_check=0;
     
@@ -609,7 +601,7 @@ class KapilChainedModelHashTableFile {
             if (current_key == Sentinel) 
               break;
             if (current_key == key) {
-              //stoc->stocRead(current_pos, value);
+              // stoc->stocRead(current_pos, value);
               return 1;
             }
             if (current_key > key) {
@@ -629,6 +621,52 @@ class KapilChainedModelHashTableFile {
     }
     return 0;
 
+  }
+
+  forceinline int scan(const Key& low_bound, const size_t len, std::vector<Payload>& addrScan) {
+    /*auto start = std::chrono::high_resolution_clock::now(); 
+    for(uint64_t i=0;i<data.size();i++) {
+      insert(data[i].first, i);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+    std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00 << " nanoseconds" << std::endl;
+    */
+    //auto begin = std::chrono::high_resolution_clock::now(); 
+    size_t directory_ind = model(low_bound)%(buckets.size());
+    //auto stop = std::chrono::high_resolution_clock::now();
+    //auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - begin); 
+    //std::cout<< std::endl << "Model calculation latency is: "<< duration.count()*1.00 << " nanoseconds" << std::endl;
+
+    int exitLoop(0), cursor(0);
+    size_t start = directory_ind;
+
+    //begin = std::chrono::high_resolution_clock::now(); 
+    for (; directory_ind < start+buckets.size(); directory_ind++) {
+      auto bucket = &buckets[directory_ind%buckets.size()];
+      while (bucket != nullptr) {
+        for (size_t i = 0; i < BucketSize; i++) {
+          const auto current_key = bucket->keys[i];
+          if (current_key == Sentinel) 
+            break;
+          const Payload current_pos = bucket->payloads[i];
+          addrScan.push_back(current_pos);
+          cursor ++;
+        }
+        bucket = bucket->next;
+      }
+      if (directory_ind == start)
+        cursor = 0;
+      if (cursor >= len)
+        break;
+    }
+    //stop = std::chrono::high_resolution_clock::now();
+    //duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - begin); 
+    //std::cout<< std::endl << "Bucket seeking latency is: "<< duration.count()*1.00 << " nanoseconds" << std::endl;
+
+
+    //std::cout << "number of scan of chain would be:" << addrScan.size() << std::endl;
+    return 1;
   }
 
 

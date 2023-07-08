@@ -416,10 +416,6 @@ class KapilLinearHashTableFile {
             return 0;
           }
           else if (current_key == key) {
-            //Payload pos = bucket->payloads[i];
-            //void *buf;
-            //posix_memalign(&buf, 512, 512);
-            //int nread = pread(storageFile, buf, blockSize, pos * blockSize);
             return 1;
           }
         }
@@ -427,6 +423,51 @@ class KapilLinearHashTableFile {
     }
     return 0;
   }
+
+  //re-write it please:
+  int scan(const Key low_bound, const size_t len, std::vector<Payload>& addrScan) {
+    size_t directory_ind = hashfn(low_bound)%(buckets.size());
+    auto start=directory_ind;
+    bool exitLoop = false;
+    for(;directory_ind<start+50000;) {
+       auto bucket = &buckets[directory_ind%buckets.size()];
+      // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
+      // this nested loop construction anyways.
+        for (size_t i = 0; i < BucketSize; i++) {
+          const auto& current_key = bucket->keys[i];
+          const auto& current_pos = bucket->payloads[i];
+          if (current_key == Sentinel) {
+            std::cerr << "cannot find filled slot in probing hashing table" << std::endl;
+          }
+          else if (current_key == low_bound) {
+            //stoc->stocRead(current_pos, value);
+            exitLoop = true;
+            break;
+          }
+        }
+      if (exitLoop)  break;
+      directory_ind++;   
+    }
+    start = directory_ind;
+    uint32_t cursor = 0;
+    for (; directory_ind < start + buckets.size(); directory_ind ++) {
+      auto bucket = &buckets[directory_ind % buckets.size()];
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        const auto& current_pos = bucket->payloads[i];
+        if (current_key != Sentinel) {
+          addrScan.push_back(current_pos);
+          //stoc->stocRead(current_pos, value);
+          cursor ++;
+        }
+      }
+      if (cursor >= (len+BucketSize))
+          break;
+    }
+    return 1;
+  }
+
+
 
   std::string name() {
     std::string prefix = (ManualPrefetch ? "Prefetched" : "");

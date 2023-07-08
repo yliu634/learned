@@ -38,11 +38,12 @@ class MultiLudoTable {
         barsNum = bars.size();
         mcp.resize(barsNum + 2);
         for (auto it = mcp.begin(); it != mcp.end(); ++it) {
-            *it = new LudoTable<K, V>(1024);
+            *it = new LudoTable<K, V>(1024); //wrong
         }
     }
 
-    explicit MultiLudoTable(const std::vector<K>& bars, const std::vector<std::vector<K>>& dataPieces) {
+    explicit MultiLudoTable(const std::vector<K>& bars, 
+                            const std::vector<std::vector<K>>& dataPieces) {
         ct = new filestore::CompactTree<K>(bars);
         barsNum = bars.size();
         mcp.resize(barsNum + 2);
@@ -92,7 +93,7 @@ class MultiLudoTable {
         return 1;
     }
 
-    std::vector<V> scan(K low_bound, K high_bound) {
+    std::vector<V> scan(K low_bound, uint32_t len = 300) {
         return {};
     }
 

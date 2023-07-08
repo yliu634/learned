@@ -371,11 +371,9 @@ class KapilLinearModelHashTableFile {
   }
 
   int lookUp(const Key& key, std::vector<char> &value) {
-    
     size_t directory_ind = model(key)%(buckets.size());
     auto start = directory_ind;
-    for(;directory_ind<start+50000;) {
-    //for(;directory_ind<start;) {
+    for(;directory_ind<start + 50000;) {
       auto bucket = &buckets[directory_ind % buckets.size()];
       for (size_t i = 0; i < BucketSize; i++) {
         const auto& current_key = bucket->keys[i];
@@ -394,6 +392,47 @@ class KapilLinearModelHashTableFile {
     return 0;
   }
 
+  int scan(const Key& low_bound, const size_t len, std::vector<Payload>& addrScan) {
+    addrScan.clear();
+    size_t directory_ind = model(low_bound)%(buckets.size());
+    auto start = directory_ind;
+    bool exitLoop = false;
+    for(;directory_ind<start + 50000;) {
+      auto bucket = &buckets[directory_ind % buckets.size()];
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        const auto& current_pos = bucket->payloads[i];
+        //stoc->stocRead(current_pos, value);
+        if (current_key == Sentinel) {
+          std::cerr << "find empty slot in probe list" << std::endl;
+          return 0;
+        } else if (current_key == low_bound) {
+          exitLoop = true;
+          break;
+        }
+      }
+      if (exitLoop) break;
+      directory_ind++; 
+    }
+    start = directory_ind;
+    uint32_t cursor = 0;
+    for (; directory_ind < start + buckets.size(); directory_ind ++) {
+      auto bucket = &buckets[directory_ind % buckets.size()];
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        const auto& current_pos = bucket->payloads[i];
+        if (current_key != Sentinel) {
+          addrScan.push_back(current_pos);
+          //stoc->stocRead(current_pos, value);
+          cursor ++;
+        }
+      }
+      if (cursor >= (len+BucketSize))
+          break;
+    }
+    return 1;
+  }
+
   std::string name() {
     std::string prefix = (ManualPrefetch ? "Prefetched" : "");
     return prefix + "KapilLinearModelHashTableFile<" + std::to_string(sizeof(Key)) + ", " +
@@ -408,7 +447,7 @@ class KapilLinearModelHashTableFile {
   }
 
   //kapil_change: assuming model size to be zero  
-  size_t model_byte_size() const { return 0; }
+  size_t model_byte_size() const { return model_byte_size(); }
 
   size_t byte_size() const { return model_byte_size() + directory_byte_size(); }
 };

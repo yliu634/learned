@@ -748,9 +748,9 @@ public:
   /// all the values and disjoint set are properly set
   bool tryBuild() {
     #ifdef PROFILE
-    if(full_debug) Clocker rebuild("Othello try rebuild");
+      if(full_debug) Clocker rebuild("Othello try rebuild");
     #else
-    cout << "rebuild" << endl;
+      // cout << "rebuild" << endl;
     #endif
     resetBuildState();
     

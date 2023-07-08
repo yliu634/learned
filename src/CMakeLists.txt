@@ -35,7 +35,8 @@ gtest_discover_tests(mt_tests)
 # ==== Benchmark executable ====
 add_executable(benchmarks benchmarks.cpp 
             ../include/ludo/farmhash.cc 
-            ../include/ludo/hashutil.cc)
+            ../include/ludo/hashutil.cc
+            ../ycsbc/core_workload.cc)
 
 include(${PROJECT_SOURCE_DIR}/thirdparty/googlebenchmark.cmake)
 target_link_libraries(benchmarks PRIVATE ${PROJECT_NAME} ${HASHING_LIBRARY} ${LEARNED_HASHING_LIBRARY} ${EXOTIC_HASHING_LIBRARY} ${HASHTABLE_LIBRARY} ${GOOGLEBENCHMARK_LIBRARY})

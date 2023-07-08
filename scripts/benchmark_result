@@ -1,15 +1,14 @@
-2023-03-31T14:31:54-07:00
+2023-06-13T13:02:37-07:00
 Running ../cmake-build-release/src/benchmarks
-Run on (8 X 4000 MHz CPU s)
+Run on (24 X 3500 MHz CPU s)
 CPU Caches:
-  L1 Data 32 KiB (x4)
-  L1 Instruction 32 KiB (x4)
-  L2 Unified 256 KiB (x4)
-  L3 Unified 8192 KiB (x1)
-Load Average: 0.51, 0.33, 0.15
+  L1 Data 32 KiB (x12)
+  L1 Instruction 32 KiB (x12)
+  L2 Unified 256 KiB (x12)
+  L3 Unified 30720 KiB (x1)
+Load Average: 0.40, 0.12, 0.04
 ***WARNING*** CPU scaling is enabled, the benchmark real time measurements may be noisy and will incur extra overhead.
------------------------------------------------------------------------------------------------------------------------------------
-Benchmark                                                                                         Time             CPU   Iterations
------------------------------------------------------------------------------------------------------------------------------------
-PointLookupMultipleLudo<KapilMultiLudoTable, 900>/1000000/5/0/iterations:20                    1166 ns         1071 ns           20
-RangeQueryMultipleLudo<KapilRangeQueryMultiLudoTable, 900>/1000000/5/0/iterations:200000      14189 ns        14188 ns       200000
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Benchmark                                                                                                                                      Time             CPU   Iterations UserCounters...
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+PointProbeSpot<ParrotControlPlaneoverallocRadixSplineHash, ParrotDataPlaneoverallocRadixSplineHash, 0>/50000000/4/0/iterations:100000        265 ns          265 ns       100000 table_bytes=1.64796G KapilParrotControlPlane<8, 8:osm:uniform:100

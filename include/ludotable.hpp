@@ -23,6 +23,8 @@
 #include "include/convenience/builtins.hpp"
 #include "include/support.hpp"
 
+#include <absl/hash/hash.h>
+
 // Class for efficiently storing key->value mappings when the size is
 // known in advance and the keys are pre-hashed into uint64s.
 // Keys should have "good enough" randomness (be spread across the
@@ -44,7 +46,6 @@
 // http://www.cs.cmu.edu/~dga/papers/cuckoo-eurosys14.pdf )
 
 namespace masters_thesis {
-
 
 template<class K, class V, uint VL>
 class DataPlaneLudo;
@@ -113,8 +114,9 @@ public:
     // using Lemire's alternative to modulo reduction:
     // http://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
     // Instead of x % N, use (x * N) >> 64.
-    assert((size & (size - 1)) == 0);
-    
+    // assert((size & (size - 1)) == 0);
+    //twoBuckets[0] = multiply_high_u32(x, size);
+    //twoBuckets[1] = multiply_high_u32(x >> 32, size);
     twoBuckets[0] = x & (size - 1); //multiply_high_u32(x, size);
     twoBuckets[1] = (x >> 32) & (size - 1); //multiply_high_u32(x >> 32, size);
   }
@@ -172,20 +174,34 @@ public:
   
   // Set upon initialization: num_entries / kLoadFactor / kSlotsPerBucket.
   std::vector<Bucket> buckets_, oldBuckets;
-  
+  absl::Hash<uint64_t> hx;
+
   virtual void setSeed(uint32_t s) {
     LudoCommon<K, V, VL>::setSeed(s);
     locator.hab.setSeed(rand() | (uint64_t(rand()) << 32));
     locator.hd.setSeed(rand());
   }
   
+  LudoTable(uint32_t capacity_)
+      : locator(1U, true), nKeys(0), capacity(capacity_) {
+    
+    num_buckets_ = 64U;
+    for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; 
+              capacity < capacity_;
+              capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket)
+      num_buckets_ <<= 1U;
+    buckets_.resize(num_buckets_, empty_bucket);
+    locator.resizeCapacity(capacity);
+  }
+  
+
   // The key type is fixed as a pre-hashed key for this specialized use.
   LudoTable(const vector<pair<K, V>> &kv,
                   uint32_t capacity_ = 1024)
       : locator(1U, true), nKeys(0), capacity(capacity_) {
     
     uint32_t toInsert = (uint32_t) kv.size();
-    
+    //auto b = absl::Hash<uint32_t>{}(toInsert, absl::Hash<uint32_t>::HashState{0x0889});
     num_buckets_ = 64U;
     
     for (capacity = num_buckets_ * kLoadFactor * kSlotsPerBucket; 
@@ -198,7 +214,7 @@ public:
     // till this line, an empty ludo is ready
     if (toInsert) { // the oldMap should be initialized
       for (int i = 0; i < toInsert; ++i) {
-        insert(kv[i].first, kv[i].second, false);
+        insert(kv[i].first, i, false);
       }
     } 
   }
@@ -244,7 +260,7 @@ public:
     locator.resizeCapacity(toInsert);
     if (toInsert) {
       for (int i = 0; i < toInsert; ++i) {
-        insert(keys[i], values[i], false);
+        insert(keys[i], i, false);
       }
     }
   }
@@ -327,7 +343,6 @@ public:
           dstBucket.occupiedMask |= 1U << slot;
           dstBucket.keys[slot] = key;
           dstBucket.values[slot] = value;
-          
           updateSeed(bi);
         }
       }
@@ -346,6 +361,7 @@ public:
     uint64_t nextNbuckets = 64U;
     uint64_t nextCapacity = nextNbuckets * kLoadFactor * kSlotsPerBucket;
     for (; nextCapacity < targetCapacity; nextCapacity = nextNbuckets * kLoadFactor * kSlotsPerBucket)
+      //nextNbuckets = std::round(nextNbuckets*1.2);
       nextNbuckets <<= 1U;
     
     bool shrink = nextNbuckets < num_buckets_;
@@ -383,9 +399,7 @@ public:
   // returns null if the table is full and the k-v is inserted to the fallback table; returns &k if inserted successfully.
   // if online, the updates are to be sent to the dp. so collect the path, and do not allow blocking rebuild in both Othello and Ludo
   // else (offline), we want all the updates to be directly reflected, even when it incur further and recursive retries.
-  UpdateResult insert(const K &k, V v, bool online = true) {
-    // checkIntegrity();
-    // v = v & ValueMask;
+  UpdateResult insert(const K &k, V v, bool online = false) {
     UpdateResult result = {};
     if (isMember(k)) {
       result = changeValue(k, v);
@@ -406,7 +420,6 @@ public:
       for (char i = 0; i < 2 && target_slot < 0; ++i) {
         uint32_t bi = buckets[i];
         Bucket &bucket = buckets_[bi];
-        
         for (char slot = 0; slot < kSlotsPerBucket; slot++) {
           if (bucket.occupiedMask & (1 << slot)) {
           } else if (target_slot == -1) {
@@ -416,7 +429,6 @@ public:
           }
         }
       }
-      
       if (target_slot != -1) {
         if(full_debug) Clocker::count("direct insert");
         bool succ = putItem(k, v, target_bucket, target_slot, target_bucket == buckets[0], online ? &result.path : nullptr);
@@ -428,17 +440,75 @@ public:
       
       if (result.status >= 0) nKeys++;
     }
-    
-    //checkIntegrity();
+
     return result;
   }
   
+  // used for extendible insert, if resize needed, stop and return 0.
+  UpdateResult insert_ext(const K &k, V v, bool online = false) {
+    UpdateResult result = {};
+    if (isMember(k)) {
+      result = changeValue(k, v);
+    } else if (nKeys + 1 > capacity) {
+      result.status = -2;
+      return result;
+    } else {
+      uint32_t target_bucket = -1;
+      char target_slot = -1;
+      uint32_t buckets[2];
+      fast_map_to_buckets(h(k), buckets, buckets_.size());
+      for (char i = 0; i < 2 && target_slot < 0; ++i) {
+        uint32_t bi = buckets[i];
+        Bucket &bucket = buckets_[bi];
+        
+        for (char slot = 0; slot < kSlotsPerBucket; slot++) {
+          if (bucket.occupiedMask & (1 << slot)) {
+          } else if (target_slot == -1) {
+            target_bucket = bi;
+            target_slot = slot; // do not break, to go through full duplication test
+            break;
+          }
+        }
+      }
+      if (target_slot != -1) {
+        if(full_debug) Clocker::count("direct insert");
+        bool succ = putItem(k, v, target_bucket, target_slot, target_bucket == buckets[0], online ? &result.path : nullptr);
+        if (!succ) result.status = -1;  // must be due to Othello
+      } else {
+        if(full_debug) Clocker::count("cuckoo insert");
+        result = CuckooInsert(k, v, online);  // if fail, may be othello or cuckoo fail
+      }
+      if (result.status >= 0) nKeys++;
+    }
+    return result;
+  }
+  
+  void dumpKey(vector<V>& res, bool diskread = false) {
+    for (Bucket& bucket: buckets_) {
+      for (uint32_t slot = 0; slot < kSlotsPerBucket; slot++) {
+        if (!(bucket.occupiedMask & (1U << slot))) 
+          continue;
+        res.push_back(bucket.keys[slot]);
+      }
+    }
+  }
+
   void dumpValue(vector<V>& res, bool diskread = false) {
     for (Bucket& bucket: buckets_) {
       for (uint32_t slot = 0; slot < kSlotsPerBucket; slot++) {
         if (!(bucket.occupiedMask & (1U << slot))) 
           continue;
         res.push_back(bucket.values[slot]);
+      }
+    }
+  }
+
+  void dumpKVPair(vector<pair<K, V>>& res) {
+    for (Bucket& bucket: buckets_) {
+      for (uint32_t slot = 0; slot < kSlotsPerBucket; slot++) {
+        if (!(bucket.occupiedMask & (1U << slot))) 
+          continue;
+        res.push_back(make_pair(bucket.keys[slot], bucket.values[slot]));
       }
     }
   }
@@ -492,7 +562,7 @@ public:
       }
     }
     
-    checkIntegrity();
+    //checkIntegrity();
     return {};
   }
   
@@ -514,7 +584,7 @@ public:
         }
       }
     }
-    checkIntegrity();
+    //checkIntegrity();
     return {};
   }
   
@@ -625,14 +695,14 @@ public:
     return false;
   }
   
-  inline char FindFreeSlot(uint32_t bucket) const {
+  inline int8_t FindFreeSlot(uint32_t bucket) const {
     return FindFreeSlot(buckets_[bucket]);
   }
   
   //  returns either -1 or the index of an
   //  available slot (0 <= slot < kSlotsPerBucket)
-  inline char FindFreeSlot(const Bucket &bucket) const {
-    for (char i = 0; i < kSlotsPerBucket; i++) {
+  inline int8_t FindFreeSlot(const Bucket &bucket) const {
+    for (int8_t i = 0; i < kSlotsPerBucket; i++) {
       if (!(bucket.occupiedMask & (1U << i))) {
         return i;
       }
@@ -662,7 +732,7 @@ public:
   inline bool RemoveInBucket(const K &k, Bucket &bucket) {
     for (char i = 0; i < kSlotsPerBucket; i++) {
       if ((bucket.occupiedMask & (1U << i)) && bucket.keys[i] == k) {
-        bucket.occupiedMask ^= 1U << i;
+        bucket.occupiedMask ^= (1U << i);
         
         unregisterKey(k);
         return true;
@@ -710,6 +780,7 @@ public:
     K &k = dst_bucket.keys[dSlot];
     OthelloUpdateResult result = toggleKey(k);
     assert(result.status == 0);
+
     
     uint8_t toSlot[4];
     uint8_t seed = updateSeed(dBkt, path ? toSlot : nullptr, dSlot);
@@ -793,7 +864,12 @@ public:
         return seed;
       }
     }
-    
+    for (char slot = 0; slot < kSlotsPerBucket; ++slot) {
+      if (bucket.occupiedMask & (1 << slot)) {
+        std::cout << "*******";
+        std::cout << bucket.keys[slot] << std::endl;
+      }
+    }
     throw runtime_error("Cannot generate a proper hash seed within 255 tries, which is rare");
   }
   
@@ -821,7 +897,8 @@ public:
   /// @return cuckoo path if rememberPath is true. or {1} to indicate success and {} to indicate fail.
   inline UpdateResult CuckooInsert(const K &k, const V &v, bool online) {
     UpdateResult result;
-    
+    //bool pp = false; 
+    //if (k == 1051735610502911) pp = true;
     int visited_end = -1;
     cpq_.reset();
     
@@ -838,7 +915,8 @@ public:
     while (!cpq_.empty()) {
       CuckooPathEntry entry = cpq_.pop_front();
       if(full_debug) Clocker::count("Cuckoo visit bucket");
-      char free_slot = FindFreeSlot(entry.bucket);
+      int8_t free_slot = FindFreeSlot(entry.bucket);
+      // std::cout << "free slot: " << free_slot << std::endl;
       if (free_slot != -1) {
         if(full_debug) Clocker::count("Cuckoo total depth", entry.depth);
         if(full_debug) Clocker::countMax("Cuckoo max depth", entry.depth);
@@ -852,7 +930,25 @@ public:
           // After, write target key/value over top of last copied entry.
           CuckooPathEntry parent = visited_[entry.parent];
           if (entry.depth == 2) toFirstBucket = entry.parent == 0;
-          
+          /*if (pp) {
+            std::cout << "before moveItem:" << std::endl;
+            auto &p = buckets_[parent.bucket];
+            auto &e = buckets_[entry.bucket];
+            std::cout << "source:" << std::endl;
+            for (char slot = 0; slot < kSlotsPerBucket; ++slot) {
+              if (p.occupiedMask & (1 << slot)) {
+                std::cout << p.keys[slot] << std::endl;
+              }
+            }
+            std::cout << "dest:" << std::endl;
+            for (char slot = 0; slot < kSlotsPerBucket; ++slot) {
+              if (e.occupiedMask & (1 << slot)) {
+                std::cout << e.keys[slot] << std::endl;
+              }
+            }
+          }
+          if (buckets_[parent.bucket].keys[entry.parent_slot] == 1028798776633320)
+            std::cout << "^^^^^^^^^^" << std::endl;*/
           moveItem(parent.bucket, entry.parent_slot, entry.bucket, free_slot, online ? &result.path : nullptr);
           
           free_slot = entry.parent_slot;
@@ -896,6 +992,7 @@ public:
     }
   }
   
+
   bool build() {
     while (true) {
       int tryCount = 0;
@@ -994,15 +1091,14 @@ public:
   };
   
 
-
-
   void print_data_statistics() {
   }
+
   std::string name() {
     // std::string prefix = (ManualPrefetch ? "Prefetched" : "");
     std::string prefix;
     return prefix + "KapilLudoTable<" + std::to_string(sizeof(K)) + ", " +
-           std::to_string(sizeof(V)) + ">";
+           std::to_string(sizeof(V));
   }
 
   size_t directory_byte_size() const {
@@ -1099,7 +1195,7 @@ public:
       return !(*this == other);
     }
   };
-//  static const uint8_t bucketLength = sizeof(Bucket);
+  //  static const uint8_t bucketLength = sizeof(Bucket);
   
   vector<Bucket> buckets;
   DataPlaneOthello<K, uint8_t, 1> locator;
@@ -1194,12 +1290,44 @@ public:
   inline bool lookUp(const K &k, V &out) const {
     uint32_t bktId[2];
 
-    //auto start = std::chrono::high_resolution_clock::now(); 
     fast_map_to_buckets(h(k), bktId, num_buckets_);
+
+
+    while (true) {
+      
+      uint8_t va1 = lock[bktId[0] & 8191], vb1 = lock[bktId[1] & 8191];
+      COMPILER_BARRIER();
+      if (va1 % 2 == 1 || vb1 % 2 == 1) continue;
+      const Bucket &bucket = buckets[bktId[locator.lookUp(k)]];
+      
+      COMPILER_BARRIER();
+      uint8_t va2 = lock[bktId[0] & 8191], vb2 = lock[bktId[1] & 8191];
+      if (va1 != va2 || vb1 != vb2) continue;
+      
+      /*start = std::chrono::high_resolution_clock::now();
+      uint64_t i = FastHasher64<K>(bucket.seed)(k) >> 62;
+      stop = std::chrono::high_resolution_clock::now();
+      duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+      std::cout<< "fast haser 64: "<< duration.count() << " nanoseconds" << std::endl;
+      */
+      //hlookup->setSeed(bucket.seed);
+      //out = bucket.values[(*hlookup)(k) >> 62];
+      //out = bucket.values[FastHasher64<K>(bucket.seed)(k) >> 62];
+      out = bucket.values[FastHasher64<K>(bucket.seed)(k) >> 62];
+
+      return true;
+    }
+  }
+  
+  // Returns true if found.  Sets *out = value.
+  inline bool lookUpExtend(const K &k, V &out, uint64_t& hk) const {
+    uint32_t bktId[2];
+
+    //auto start = std::chrono::high_resolution_clock::now(); 
+    fast_map_to_buckets(hk, bktId, num_buckets_);
     //auto stop = std::chrono::high_resolution_clock::now(); 
     //auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
     //std::cout << "fast map to hash: "<< duration.count() << " nanoseconds" << std::endl;
-
 
     while (true) {
       

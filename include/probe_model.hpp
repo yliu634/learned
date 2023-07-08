@@ -127,17 +127,10 @@ class KapilLinearModelHashTable {
    * together with their corresponding payloads
    */
   KapilLinearModelHashTable(std::vector<std::pair<Key, Payload>> data)
-      : 
-        tape(std::make_unique<support::Tape<Bucket>>()) {
+      :tape(std::make_unique<support::Tape<Bucket>>()) {
 
-    if (OverAlloc<10000)
-    {
-      buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
-    } 
-    else
-    {
-      buckets.resize((1 + data.size()*(((OverAlloc-10000)/100.00)) / BucketSize)); 
-    }               
+    buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize); 
+                 
     // ensure data is sorted
     std::sort(data.begin(), data.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
@@ -193,7 +186,7 @@ class KapilLinearModelHashTable {
   }
 
   
-
+  
 
   class Iterator {
     size_t directory_ind, bucket_ind;
@@ -335,7 +328,7 @@ class KapilLinearModelHashTable {
     }
 
     if (output) {
-      std::ofstream outFile("../results/ideal_pos_diff_probe_model.json");
+      std::ofstream outFile("../results/ideal_pos_diff_probe_model_wiki_2.json");
       if (outFile.is_open()) {
         for (auto it = dist_from_ideal_map.begin(); it != dist_from_ideal_map.end(); ++it) {
             outFile << it->first << "," << it->second << std::endl;
@@ -387,7 +380,6 @@ class KapilLinearModelHashTable {
    * @param key the key to search
    */
   forceinline int operator[](const Key& key) {
-
     size_t directory_ind = model(key)%(buckets.size());
     auto start=directory_ind;
 
@@ -418,11 +410,51 @@ class KapilLinearModelHashTable {
     return 0;
   }
 
+  // scan
+  Payload* scan(const Key& low_key, const uint32_t len = 300) {
+    size_t directory_ind = model(low_key)%(buckets.size());
+    auto start=directory_ind;
+    Payload res[len];
+    bool fill = false;
+    uint32_t idx(0);
+    //  std::cout<<" key: "<<key<<std::endl;
+    //  bool exit=false;
+
+    for(;directory_ind<start+buckets.size();) {
+       auto bucket = &buckets[directory_ind%buckets.size()];
+
+      // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
+      // this nested loop construction anyways.
+      // std::cout<<"probe rate: "<<directory_ind+1-start<<std::endl;
+       
+      for (size_t i = 0; i < BucketSize; i++) {
+          const auto& current_key = bucket->keys[i];
+          // std::cout<<current_key<<" match "<<key<<std::endl;
+          if (current_key == Sentinel) {
+            continue;
+          }
+          if (current_key == low_key) {
+            fill = true;
+          }
+          if (fill) {
+            res[idx++] = bucket->payloads[i];
+            if (idx >= len)
+              return res;
+          }
+      }
+      directory_ind ++;
+    }
+
+    return 0;
+  }
+
+
   std::string name() {
     std::string prefix = (ManualPrefetch ? "Prefetched" : "");
     return prefix + "KapilLinearModelHashTable<" + std::to_string(sizeof(Key)) + ", " +
            std::to_string(sizeof(Payload)) + ", " + std::to_string(BucketSize) +
-           ", " + model.name() + ">";
+           ", " + model.name() +  "model count::" + std::to_string(model.model_count()) + 
+           "size: " + std::to_string(model.byte_size()) + ">";
   }
 
   size_t directory_byte_size() const {
@@ -431,9 +463,9 @@ class KapilLinearModelHashTable {
     return directory_bytesize;
   }
 
-  //kapil_change: assuming model size to be zero  
-  size_t model_byte_size() const { return 0; }
+  //kapil_change: assuming model size to be zero
+  size_t model_byte_size() const { return model.byte_size(); }
 
-  size_t byte_size() const { return model_byte_size() + directory_byte_size(); }
+  size_t byte_size() const { return directory_byte_size() + model_byte_size(); }
 };
 }  // namespace masters_thesis

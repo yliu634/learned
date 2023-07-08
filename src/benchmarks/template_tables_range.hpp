@@ -36,13 +36,6 @@ namespace _ {
 using Key = std::uint64_t;
 using Payload = std::uint64_t;
 
-
-// const std::vector<std::int64_t> dataset_sizes{100000000};
-// const std::vector<std::int64_t> datasets{
-//     static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::UNIFORM)
-//     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
-//     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL)
-//     };
 const std::vector<std::int64_t> probe_distributions{
     // static_cast<std::underlying_type_t<dataset::ProbingDistribution>>(
     //     dataset::ProbingDistribution::EXPONENTIAL_SORTED),
@@ -53,17 +46,16 @@ const std::vector<std::int64_t> probe_distributions{
 
 const std::vector<std::int64_t> dataset_sizes{100000000};
 const std::vector<std::int64_t> succ_probability{100};
-// const std::vector<std::int64_t> point_query_prop{100,90,80,70,60,50,40,30,20,10,0};
 const std::vector<std::int64_t> point_query_prop{0};
 const std::vector<std::int64_t> range_query_size{1,2,4,8,16,32,64,128,256,512,1024};
 const std::vector<std::int64_t> datasets{
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::UNIFORM),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::NORMAL),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::WIKI),
+    //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::SEQUENTIAL),
+    //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::GAPPED_10),
+    //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::UNIFORM),
+    //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::NORMAL),
+    //static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::FB),
     // static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::OSM),
-    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::FB)
+    static_cast<std::underlying_type_t<dataset::ID>>(dataset::ID::WIKI)
     };
 
 // const std::vector<std::int64_t> probe_distributions{
@@ -133,14 +125,6 @@ static void TableProbe(benchmark::State& state) {
   const auto probing_dist =
       static_cast<dataset::ProbingDistribution>(state.range(2));
 
-  // google benchmark will run a benchmark function multiple times
-  // to determine, amongst other things, the iteration count for
-  // the benchmark loop. Technically, BM functions must be pure. However,
-  // since this setup logic is very expensive, we cache setup based on
-  // a unique signature containing all parameters.
-  // NOTE: google benchmark's fixtures suffer from the same
-  // 'execute setup multiple times' issue:
-  // https://github.com/google/benchmark/issues/952
   std::string signature =
       std::string(typeid(Table).name()) + "_" + std::to_string(RangeSize) +
       "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
@@ -379,7 +363,6 @@ static void PointProbe(benchmark::State& state) {
       std::transform(
           keys.begin(), keys.end(), std::back_inserter(data),
           [](const Key& key) { return std::make_pair(key, key - 5); });
-      // int succ_probability=100;
       probing_set = dataset::generate_probing_set(keys, probing_dist,succ_probability);
     }
 
@@ -515,9 +498,7 @@ static void PointProbe(benchmark::State& state) {
     auto duration_1 = duration_cast<std::chrono::nanoseconds>(stop_1 - start_1); 
     std::cout << "HashRangeQuery Latency is: "<< duration_1.count()*1.00/query_count << " nanoseconds" << std::endl;
 
-
     std::cout<<"total sum:"<<total_sum<<std::endl;
-
 
   }
   
@@ -525,13 +506,7 @@ static void PointProbe(benchmark::State& state) {
   assert(prev_table != nullptr);
   Table* table = (Table*)prev_table;
 
-
-
   previous_signature = signature;  
-
-
-
-  // std::cout<<"again?"<<std::endl;
 
   size_t i = 0;
   for (auto _ : state) {
@@ -571,17 +546,9 @@ static void CollisionStats(benchmark::State& state) {
   const auto did = static_cast<dataset::ID>(state.range(1));
   const auto probing_dist =
       static_cast<dataset::ProbingDistribution>(state.range(2));
-   const auto succ_probability =
-      static_cast<size_t>(state.range(3));    
-
-  // google benchmark will run a benchmark function multiple times
-  // to determine, amongst other things, the iteration count for
-  // the benchmark loop. Technically, BM functions must be pure. However,
-  // since this setup logic is very expensive, we cache setup based on
-  // a unique signature containing all parameters.
-  // NOTE: google benchmark's fixtures suffer from the same
-  // 'execute setup multiple times' issue:
-  // https://github.com/google/benchmark/issues/952
+  const auto succ_probability =
+      static_cast<size_t>(state.range(3));
+  
   std::string signature =
       std::string(typeid(Table).name()) + "_" + std::to_string(RangeSize) +
       "_" + std::to_string(dataset_size) + "_" + dataset::name(did) + "_" +
@@ -621,26 +588,18 @@ static void CollisionStats(benchmark::State& state) {
     std::chrono::duration<double> diff = end - start;
     std::cout << "succeeded in " << std::setw(9) << diff.count() << " seconds"
               << std::endl;
-    
-    
 
   }
   
-
   assert(prev_table != nullptr);
   Table* table = (Table*)prev_table;
 
-  if (previous_signature != signature)
-  {
+  if (previous_signature != signature) {
     std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
     table->print_data_statistics();
   }
 
-  // std::cout<<"signature swap"<<std::endl;
-
   previous_signature = signature;  
-
-  // std::cout<<"again?"<<std::endl;
 
   size_t i = 0;
   for (auto _ : state) {
@@ -827,44 +786,10 @@ static void PointProbeCuckoo(benchmark::State& state) {
   Table* table = (Table*)prev_table;
 
 
-  if (previous_signature != signature)
-  {
+  if (previous_signature != signature) {
     std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
     table->print_data_statistics();
   }
-
-
-  // if (previous_signature != signature)
-  // {
-  //   std::cout<<"Probing set size is: "<<probing_set.size()<<std::endl;
-  //   std::cout<<std::endl<<" Dataset Size: "<<std::to_string(dataset_size) <<" Dataset: "<< dataset::name(did)<<std::endl;
-  //   table->print_data_statistics();
-
-   
-
-  //    auto start = std::chrono::high_resolution_clock::now(); 
-
-  //   for(int itr=0;itr<probing_set.size()*0.01;itr++)
-  //   {
-  //     const auto searched = probing_set[itr%probing_set.size()];
-  //     // i++;
-  //     // table->hash_val(searched);
-  //     // Lower bound lookup
-  //    table->insert(searched,searched);  // TODO: does this generate a 'call' op? =>
-  //                     // https://stackoverflow.com/questions/10631283/how-will-i-know-whether-inline-function-is-actually-replaced-at-the-place-where
-      
-      
-  //     // __sync_synchronize();
-  //   }
-
-  //    auto stop = std::chrono::high_resolution_clock::now(); 
-  //   // auto duration = duration_cast<milliseconds>(stop - start); 
-  //   auto duration = duration_cast<std::chrono::nanoseconds>(stop - start); 
-  //   std::cout << "Insert Latency is: "<< duration.count()*100.00/probing_set.size() << " nanoseconds" << std::endl;
-
-  
-  // }
-
 
   // std::cout<<"signature swap"<<std::endl;
 

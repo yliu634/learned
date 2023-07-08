@@ -73,34 +73,33 @@ namespace kapilmodelhashtable {
                 std::string fileName = "../datasets/oneFile.txt")
          : MaxKickCycleLength(50000) {
 
-      stoc = new filestore::Storage(fileName, data.size(), blockSize);
-      value.resize(blockSize, 'a');
-      buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize);
+         stoc = new filestore::Storage(fileName, data.size(), blockSize);
+         value.resize(blockSize, 'a');
+         buckets.resize((1 + data.size()*(1.00+(OverAlloc/100.00))) / BucketSize);
 
-      std::sort(data.begin(), data.end(),
-         [](const auto& a, const auto& b) { return a.first < b.first; });
+         std::sort(data.begin(), data.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
 
-      // obtain list of keys -> necessary for model training
-      std::vector<Key> keys;
-      keys.reserve(data.size());
-      std::transform(data.begin(), data.end(), std::back_inserter(keys),
-                     [](const auto& p) { return p.first; });
+         // obtain list of keys -> necessary for model training
+         std::vector<Key> keys;
+         keys.reserve(data.size());
+         std::transform(data.begin(), data.end(), std::back_inserter(keys),
+                        [](const auto& p) { return p.first; });
 
-      // train model on sorted data
-      model.train(keys.begin(), keys.end(), buckets.size());
+         // train model on sorted data
+         model.train(keys.begin(), keys.end(), buckets.size());
 
-      auto start = std::chrono::high_resolution_clock::now(); 
-      for(uint64_t i=0;i<data.size();i++) {
-         insert(data[i].first, i);
+         auto start = std::chrono::high_resolution_clock::now(); 
+         for(uint64_t i=0;i<data.size();i++) {
+            insert(data[i].first, i);
+         }
+         auto stop = std::chrono::high_resolution_clock::now(); 
+         auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
+         std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/data.size() << " nanoseconds" << std::endl;
       }
-      auto stop = std::chrono::high_resolution_clock::now(); 
-      auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start); 
-      std::cout<< std::endl << "Insert Latency is: "<< duration.count()*1.00/data.size() << " nanoseconds" << std::endl;
 
-      }
-
-      int lookup(const Key& key) const {
-         const auto h1 = model(key);
+      int lookUp(const Key& key, std::vector<char>& value) {
+         const auto h1 = model(key)%buckets.size();
          const auto i1 = h1%buckets.size();
 
          const Bucket* b1 = &buckets[i1];
@@ -111,7 +110,6 @@ namespace kapilmodelhashtable {
                return 1;
             }
          }
-         
          auto i2 = (hashfn2(key))%buckets.size();
          if (i2 == i1) {
             i2 = (i1 == buckets.size() - 1) ? 0 : i1 + 1;

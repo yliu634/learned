@@ -234,13 +234,11 @@ class KapilChainedHashTableFile {
 
     std::sort(num_ele.begin(),num_ele.end());
 
-    for(int i=0;i<num_ele.size();i++)
-    {
+    for(int i=0;i<num_ele.size();i++) {
       num_ele_map[num_ele[i]]=0;
     }
 
-    for(int i=0;i<num_ele.size();i++)
-    {
+    for(int i=0;i<num_ele.size();i++) {
       num_ele_map[num_ele[i]]+=1;
     }
 
@@ -321,21 +319,8 @@ class KapilChainedHashTableFile {
 
   int lookUp(const Key& key, std::vector<char>& value) {
     assert(key != Sentinel);
-
-    // obtain directory bucket
     const size_t directory_ind = hashfn(key)%buckets.size();
-
     auto bucket = &buckets[directory_ind];
-    // prefetch_next(bucket);
-
-    // since BucketSize is a template arg and therefore compile-time static,
-    // compiler will recognize that all branches of this if/else but one can
-    // be eliminated during optimization, therefore making this a 0 runtime
-    // cost specialization
-
-    // Generic non-SIMD algorithm. Note that a smart compiler might vectorize
-    // this nested loop construction anyways.
-
     while (bucket != nullptr) {
       for (size_t i = 0; i < BucketSize; i++) {
         const auto& current_key = bucket->keys[i];
@@ -352,6 +337,45 @@ class KapilChainedHashTableFile {
 
     return 0;
   }
+
+
+  //used in scan
+  int littlelookUp(const Key& key, Payload& val) {
+    assert(key != Sentinel);
+    // obtain directory bucket
+    const size_t directory_ind = hashfn(key)%buckets.size();
+    auto bucket = &buckets[directory_ind];
+    while (bucket != nullptr) {
+      for (size_t i = 0; i < BucketSize; i++) {
+        const auto& current_key = bucket->keys[i];
+        Payload current_pos = bucket->payloads[i];
+        if (current_key == Sentinel) break;
+        if (current_key == key) {
+          val = current_pos;
+          return 1;
+        }
+      }
+      bucket = bucket->next;
+    }
+    return 0;
+  }
+
+
+  int scan(const Key low_bound, const size_t len, std::vector<Payload>& addrScan) {
+    addrScan.clear();
+    size_t cursor(len);
+    Key start = low_bound;
+    Payload value(0);
+    while(cursor > 0) {
+      if (littlelookUp(start, value) >= 1) {
+        addrScan.push_back(value);
+        cursor --;
+      }
+      start ++;
+    }
+    return 1;
+  }
+
 
   std::string name() {
     std::string prefix = (ManualPrefetch ? "Prefetched" : "");

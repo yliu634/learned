@@ -27,6 +27,9 @@
 
 #include "include/ludotable.hpp"
 #include "include/ludotable_rq.hpp"
+#include "include/ludotable_extd.hpp"
+
+#include "include/parrot.hpp"
 
 // Order is important
 #include "include/convenience/undef.hpp"

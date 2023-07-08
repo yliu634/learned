@@ -11,8 +11,11 @@ target_include_directories(${PROJECT_NAME} INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
 
-#target_link_libraries(${PROJECT_NAME} INTERFACE )
-target_sources(${PROJECT_NAME} INTERFACE masters_thesis.hpp include/)
+add_subdirectory(abseil-cpp)
+
+target_link_libraries(${PROJECT_NAME} INTERFACE /usr/local/lib/ absl::hash)
+
+target_sources(${PROJECT_NAME} INTERFACE masters_thesis.hpp include/ abseil-cpp/)
 
 # Benchmark and test code
 get_directory_property(hasParent PARENT_DIRECTORY)

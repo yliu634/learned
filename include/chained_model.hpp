@@ -55,10 +55,54 @@ class KapilChainedModelHashTable {
             return;
           }
         }
-
         previous = current;
       }
 
+      // static var will be shared by all instances
+      previous->next = tape.alloc();
+      previous->next->insert(key, payload, tape);
+    }
+
+    void insert2(const Key& key, const Payload& payload,
+                support::Tape<Bucket>& tape) {
+      Bucket* previous = this;
+      uint idx(0);
+      bool ex(false);
+      for (Bucket* current = previous; current != nullptr;
+           current = current->next) {
+        for (size_t i = 0; i < BucketSize; i++) {
+          if (current->keys[i] == Sentinel) {
+            current->keys[i] = key;
+            current->payloads[i] = payload;
+            return;
+          } else if (current->keys[i] > key) {
+            idx = i;
+            ex = true;
+            break;
+          }
+        }
+        if (ex) {
+          Bucket* head = new Bucket();
+          uint idxx = 0;
+          for (size_t i = idx; i < BucketSize; i++) {
+            head->keys[idxx++] = current->keys[i];
+          }
+          while (idxx < BucketSize) {
+            head->keys[idxx++] = 0;
+          }
+          current->keys[idx] = key;
+          current->payloads[idx] = payload;
+          for (size_t i = idx+1; i < BucketSize; i++) {
+            current->keys[i] = 0;
+            current->payloads[i] = 0;
+          }
+          head->next = current->next;
+          current->next = head;
+          return;
+        }
+        previous = current;
+      }
+      
       // static var will be shared by all instances
       previous->next = tape.alloc();
       previous->next->insert(key, payload, tape);
@@ -86,12 +130,20 @@ class KapilChainedModelHashTable {
    * construction interface.
    */
   forceinline void insert(const Key& key, const Payload& payload) {
-    // const auto index = model(key)/100000000.0;
     const auto index = model(key)%buckets.size();
     // std::cout<<"key: "<<key<<" index: "<<index<<" scale factor: "<<std::endl;
     assert(index >= 0);
     assert(index < buckets.size());
     buckets[index].insert(key, payload, *tape);
+  }
+
+  forceinline int insert2(const Key& key, const Payload& payload) {
+    const auto index = model(key)%buckets.size();
+    // std::cout<<"key: "<<key<<" index: "<<index<<" scale factor: "<<std::endl;
+    assert(index >= 0);
+    assert(index < buckets.size());
+    buckets[index].insert2(key, payload, *tape);
+    return 0;
   }
 
  public:
@@ -148,7 +200,7 @@ class KapilChainedModelHashTable {
 
     std::cout<<"Start Inserts"<<std::endl;
     auto start = std::chrono::high_resolution_clock::now(); 
-    for(uint64_t i=0;i<data.size();i++) {
+    for(uint64_t i=0; i<data.size();i++) {
       insert(data[i].first, i);
     }
     auto stop = std::chrono::high_resolution_clock::now(); 
@@ -237,17 +289,12 @@ class KapilChainedModelHashTable {
 
     // std::cout<<"index: "<<index<<" curr val: "<<key_vec[index]<<std::endl;
 
-    if(key_vec[index]<low_key)
-    {
-      while(key_vec[index]<low_key)
-      {
+    if(key_vec[index]<low_key) {
+      while(key_vec[index]<low_key) {
         index+=2;
       }
-    }
-    else
-    {
-      while(key_vec[index-2]>low_key)
-      {
+    } else {
+      while(key_vec[index-2]>low_key) {
         index-=2;
       }
     }
@@ -375,6 +422,56 @@ class KapilChainedModelHashTable {
 
   }
 
+  uint64_t* scan(uint64_t low_key, const uint64_t len = 300)
+  {
+    uint64_t ans=0;
+    uint64_t directory_ind=model(low_key) % buckets.size();
+    uint64_t res[len];
+    int exit_check=0;
+    uint64_t idx(0);
+    while(directory_ind < buckets.size())
+    {
+        auto bucket = &buckets[directory_ind];
+      
+        while (bucket != nullptr) 
+        {
+            for (size_t i = 0; i < BucketSize; i++) 
+            {
+                const auto& current_key = bucket->keys[i];
+                if (current_key == Sentinel) break;
+                if (current_key >= low_key && idx < len) 
+                {
+                  //ans+=bucket->payloads[0];
+                  res[idx++] = bucket->payloads[i];
+                }
+                if(idx >= len && current_key!=Sentinel)
+                {
+                  exit_check=1;
+                  break;
+                }
+            }
+            
+            if(exit_check==1)
+            {
+              break;
+            }
+            
+            // bucket_count++;
+            bucket = bucket->next;
+        //   prefetch_next(bucket);
+        }
+
+        if(exit_check==1) {
+          break;
+        }
+
+        directory_ind++;
+
+    }
+
+    return res;
+
+  }
 
 
   int useless_func() {
@@ -477,11 +574,7 @@ class KapilChainedModelHashTable {
     }
 
     std::cout<<"End Gap Stats"<<std::endl;
-
-
     return;
-
-
   }
 
 
@@ -531,8 +624,6 @@ class KapilChainedModelHashTable {
 
   }
 
-
-
   /**
    * Past the end iterator, use like usual in stl
    */
@@ -542,6 +633,27 @@ class KapilChainedModelHashTable {
 
   forceinline int hash_val(const Key& key) {
     return model(key);
+  }
+
+  void printallelements() {
+    for (uint32_t i = 0; i < 0.4 * buckets.size(); i++) {
+      uint nkeys(0);
+      auto bucket = &buckets[i];
+      if (nkeys == 0 && bucket == nullptr) {
+         nkeys = 0;
+      } else {
+        while (bucket != nullptr) {
+          for (size_t i = 0; i < BucketSize; i++) {
+            const auto& current_key = bucket->keys[i];
+            if (current_key == Sentinel) 
+              break;
+            nkeys ++;
+          }
+          bucket = bucket->next;
+        }
+      }
+      std::cout << "# key chained: " << nkeys << std::endl;
+    }
   }
 
 
@@ -554,26 +666,26 @@ class KapilChainedModelHashTable {
   forceinline int operator[](const Key& key) {
     // assert(key != Sentinel);
     // obtain directory bucket
-    size_t directory_ind = model(key)%buckets.size();
+    size_t directory_ind = model(key) % buckets.size();
     int exit_check=0;
     
     while(true) {
       auto bucket = &buckets[directory_ind];
       while (bucket != nullptr) {
         for (size_t i = 0; i < BucketSize; i++) {
-            const auto& current_key = bucket->keys[i];
-            if (current_key == Sentinel) 
-              break;
-            if (current_key == key) {
-              Payload payload = bucket->payloads[i];
-              return 1;
-              // ans+=bucket->payloads[0];
-              // std::cout<<"bucket count: "<<bucket_count<<std::endl;
-            }
-            if (current_key > key) {
-              exit_check=1;
-              break;
-            }
+          const auto& current_key = bucket->keys[i];
+          if (current_key == Sentinel) 
+            break;
+          if (current_key == key) {
+            Payload payload = bucket->payloads[i];
+            return payload;
+            // ans+=bucket->payloads[0];
+            // std::cout<<"bucket count: "<<bucket_count<<std::endl;
+          }
+          if (current_key > key) {
+            exit_check=1;
+            break;
+          }
         }
         if (exit_check==1) {
           break;
@@ -609,3 +721,5 @@ class KapilChainedModelHashTable {
   size_t byte_size() const { return model_byte_size() + directory_byte_size(); }
 };
 }  // namespace masters_thesis
+
+

@@ -13,6 +13,9 @@
 
 #include "farmhash.h"
 #include "hashutil.h"
+#include "xxhash.h"
+
+#include <absl/hash/hash.h>
 
 template<class K>
 class Hasher32 {
@@ -73,7 +76,7 @@ template<class K>
 class Hasher64 {
 public:
   uint64_t s;    //!< hash s.
-  
+
   Hasher64()
     : s(0xe2211e2211) {
   }
@@ -125,6 +128,55 @@ public:
   }
 };
 
+template<class K>
+class xxFastHasher32 {
+public:
+  uint32_t s;
+  xxFastHasher32()
+    : s(0xe211f58a) {
+  }
+  explicit xxFastHasher32(uint32_t _s)
+    : s(_s) {
+  }
+  inline void setSeed(uint32_t _s) {
+    s = _s;
+  }
+  inline uint32_t operator()(const K &k0) const {
+    XXHash32 xxh(s); 
+    const uint64_t *base = (uint64_t*) &k0;
+    //const size_t keyByteLength = sizeof(k0);
+    size_t keyByteLength = 4;
+    //return HashUtil::Crc8(base, keyByteLength, s);
+    xxh.add(base, keyByteLength);
+    return xxh.hash();
+    //return (uint8_t) (absl::HashOf(k0 * s) & 0xff);
+  }
+};
+
+
+template<class K>
+class abslHasher8 {
+public:
+  uint32_t s;
+  abslHasher8()
+    : s(0xe211f58a) {
+  }
+  explicit abslHasher8(uint32_t _s)
+    : s(_s) {
+  }
+  inline void setSeed(uint32_t _s) {
+    s = _s;
+  }
+  inline uint8_t operator()(const K &k0) const {
+    //XXHash32 xxh(s);
+    //const uint64_t *base = (uint64_t*) &k0;
+    //const size_t keyByteLength = sizeof(k0);
+    // size_t keyByteLength = 4;
+    //return HashUtil::Crc8(base, keyByteLength, s);
+    return (uint8_t) (absl::HashOf(k0 * s) & 0xff);
+  }
+};
+
 
 //! \brief A hash function that hashes keyType to uint32_t. When SSE4.2 support is found, use sse4.2 instructions, otherwise use default hash function  std::hash.
 template<class K>
@@ -149,21 +201,48 @@ public:
   }
 };
 
+template<class K>
+class AbslFastHasherTuple {
+public:
+  AbslFastHasherTuple()
+    : s(0xe2) {
+  }
+  explicit AbslFastHasherTuple(uint32_t _s)
+    : s(_s) {
+  }
+  inline void setSeed(uint32_t _s) {
+    s = _s;
+  }
+  inline uint8_t operator()(const K &k0) const {
+    return absl::HashOf(std::tuple(k0, s, 0)) & 0xff;
+    //auto hash = absl::HashOf(k0);
+    //return ((hash) % (s * 13 + 15)) & 0xff; //dont change
+    //return absl::HashOf(std::to_string(k0) + std::to_string(s), 10) & 0xff;
+  }
+private:
+  uint32_t s;
+};
 
 template<class K>
-class FastHasher64I : public Hasher64<K> {
+class FastMurmurHasher64 : public Hasher64<K>{
 public:
-  FastHasher64I()
-    : Hasher64<K>(0xe2211e2211) {
+
+  FastMurmurHasher64()
+    : s(0xe2118a43) {
   }
-  explicit FastHasher64I(uint64_t _s)
-    : Hasher64<K>(_s) {
+  explicit FastMurmurHasher64(uint64_t _s)
+    : s(_s) {
   }
   inline void setSeed(uint64_t _s) {
-    this->s = _s;
+    s = _s;
   }
-  inline uint64_t operator()(const K &k0) const {
+  inline uint8_t operator()(const K &k0) const {
     void *base = this -> template getBase<K>(k0);
-    return HashUtil::MurmurHash(base, sizeof(K), this->s);
+    const uint16_t keyByteLength = this -> template getKeyByteLength<K>(k0);
+    return HashUtil::MurmurHash(base, keyByteLength, s) & 0xff;
   }
+private:
+  uint64_t s;
 };
+
+
