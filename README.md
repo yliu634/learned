@@ -1,7 +1,7 @@
 
 # Hashing Benchmarking
 
-This repository has the source code for the implementation to have artifact evaluation for Sigmod 2024 3rd round submission -- Parrot Hashing. 
+This repository has the source code for the implementation to have artifact evaluation for Parrot Hashing. 
 
 
 ### Prerequisites
